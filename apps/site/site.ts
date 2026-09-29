@@ -197,7 +197,7 @@ async function resolveIncludes(html: string): Promise<string> {
     const componentPath = join(COMPONENTS_DIR, match[1].trim());
     const file = Bun.file(componentPath);
     const content = (await file.exists()) ? await file.text() : `<!-- missing: ${match[1].trim()} -->`;
-    html = html.replace(match[0], content);
+    html = html.replace(match[0], () => content);
   }
   return html;
 }
