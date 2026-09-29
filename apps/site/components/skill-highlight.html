@@ -1,0 +1,77 @@
+<style>
+  a.cv-skill-active,
+  a.cv-tag-match {
+    color: #00ff41;
+    border-color: #00ff41;
+    background-color: rgba(0, 255, 65, 0.12);
+  }
+  article.cv-article-match {
+    border-left-color: #00ff41;
+  }
+  article.cv-article-dim {
+    opacity: 0.35;
+  }
+  article {
+    transition: opacity 150ms, border-color 150ms;
+  }
+</style>
+<script>
+  (() => {
+    const left = document.querySelector('[data-cv-left]');
+    const skills = document.querySelector('[data-cv-skills]');
+    if (!left || !skills) return;
+
+    const tagsByHref = new Map();
+    for (const tag of left.querySelectorAll('article .flex-wrap a[href]')) {
+      const href = tag.getAttribute('href');
+      if (!tagsByHref.has(href)) tagsByHref.set(href, []);
+      tagsByHref.get(href).push(tag);
+    }
+    const taggedArticles = [...left.querySelectorAll('article')].filter((a) => a.querySelector('.flex-wrap a[href]'));
+
+    let active = null;
+
+    const clear = () => {
+      for (const el of left.querySelectorAll('.cv-tag-match')) el.classList.remove('cv-tag-match');
+      for (const a of taggedArticles) a.classList.remove('cv-article-match', 'cv-article-dim');
+      if (active) {
+        active.classList.remove('cv-skill-active');
+        active.setAttribute('aria-pressed', 'false');
+      }
+      active = null;
+    };
+
+    const select = (skill) => {
+      const wasActive = skill === active;
+      clear();
+      if (wasActive) return;
+      active = skill;
+      skill.classList.add('cv-skill-active');
+      skill.setAttribute('aria-pressed', 'true');
+      const matches = tagsByHref.get(skill.getAttribute('href'));
+      for (const tag of matches) tag.classList.add('cv-tag-match');
+      for (const a of taggedArticles) {
+        a.classList.add(matches.some((t) => a.contains(t)) ? 'cv-article-match' : 'cv-article-dim');
+      }
+    };
+
+    const isPlainClick = (e) => e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
+
+    for (const skill of skills.querySelectorAll('a[href]')) {
+      if (!tagsByHref.has(skill.getAttribute('href'))) continue;
+      skill.setAttribute('aria-pressed', 'false');
+      skill.addEventListener('mousedown', (e) => {
+        if (isPlainClick(e)) select(skill);
+      });
+      skill.addEventListener('click', (e) => {
+        if (!isPlainClick(e)) return;
+        e.preventDefault();
+        if (e.detail === 0) select(skill);
+      });
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') clear();
+    });
+  })();
+</script>
