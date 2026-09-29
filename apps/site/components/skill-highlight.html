@@ -3,12 +3,18 @@
     background: transparent;
     color: inherit;
     white-space: nowrap;
+    /* Horizontal breathing room without shifting the surrounding text. */
+    padding: 0 0.3em;
+    margin: 0 -0.3em;
+    border-radius: 2px;
   }
-  .cv-hit {
+  .cv-hit,
+  .cv-hit-out {
     position: relative;
   }
-  /* Terminal-selection block: wipes in from the left, then out to the right, revealing the lit state. */
-  .cv-hit::after {
+  /* Terminal-selection block that covers the word while its state flips underneath. */
+  .cv-hit::after,
+  .cv-hit-out::after {
     content: '';
     position: absolute;
     inset: -1px;
@@ -17,13 +23,26 @@
     background: #00ff41;
     box-shadow: 0 0 12px rgba(0, 255, 65, 0.8);
     transform: scaleX(0);
-    animation: cv-wipe 560ms cubic-bezier(0.7, 0, 0.3, 1) var(--cv-delay, 0ms) both;
   }
-  @keyframes cv-wipe {
+  /* On: wipes in from the left, out to the right. */
+  .cv-hit::after {
+    animation: cv-wipe-in 560ms cubic-bezier(0.7, 0, 0.3, 1) var(--cv-delay, 0ms) both;
+  }
+  /* Off: the mirror image — in from the right, out to the left. */
+  .cv-hit-out::after {
+    animation: cv-wipe-out 560ms cubic-bezier(0.7, 0, 0.3, 1) var(--cv-delay, 0ms) both;
+  }
+  @keyframes cv-wipe-in {
     0% { transform: scaleX(0); transform-origin: left; }
     50% { transform: scaleX(1); transform-origin: left; }
     50.01% { transform: scaleX(1); transform-origin: right; }
     100% { transform: scaleX(0); transform-origin: right; }
+  }
+  @keyframes cv-wipe-out {
+    0% { transform: scaleX(0); transform-origin: right; }
+    50% { transform: scaleX(1); transform-origin: right; }
+    50.01% { transform: scaleX(1); transform-origin: left; }
+    100% { transform: scaleX(0); transform-origin: left; }
   }
   mark.cv-on {
     color: #00ff41;
@@ -53,7 +72,7 @@
     opacity: 0.35;
   }
   @media (prefers-reduced-motion: reduce) {
-    .cv-hit::after { display: none; }
+    .cv-hit::after, .cv-hit-out::after { display: none; }
     mark.cv-on, button.cv-on { animation: none; }
   }
 </style>
@@ -64,7 +83,7 @@
     if (!left || !skills) return;
 
     const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const WIPE_HALF_MS = 280;
+    const WIPE_MS = 560;
     const STAGGER_MS = 45;
     const MAX_DELAY_MS = 700;
     const GLYPHS = '!<>-_\\/[]{}—=+*^?#';
@@ -78,10 +97,14 @@
       chip.setAttribute('aria-pressed', 'false');
     }
 
-    // term -> { marks, chips, timers, live }
+    // term -> marks wrapped for it
     const selected = new Map();
+    // term -> marks still playing their off animation
+    const leaving = new Map();
     // chip -> number of selected terms that match it
     const chipHits = new Map();
+    // element -> animation token; starting a new animation invalidates pending steps of the old one
+    const tokens = new WeakMap();
 
     const termRegExp = (term) => {
       const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, (c) => `\\${c}`);
@@ -119,14 +142,21 @@
       node.replaceWith(fragment);
     };
 
-    const decode = (el, text, entry) => {
+    const unwrap = (mark) => {
+      tokens.set(mark, (tokens.get(mark) ?? 0) + 1);
+      const parent = mark.parentNode;
+      mark.replaceWith(mark.dataset.text);
+      parent?.normalize();
+    };
+
+    const decode = (el, text, token) => {
       const queue = [...text].map((ch) => {
         const start = Math.floor(Math.random() * 5);
         return { ch, start, end: start + 4 + Math.floor(Math.random() * 6) };
       });
       let frame = 0;
       const tick = () => {
-        if (!entry.live || !el.isConnected) return;
+        if (tokens.get(el) !== token || !el.isConnected) return;
         let done = 0;
         el.textContent = queue
           .map(({ ch, start, end }) => {
@@ -145,23 +175,36 @@
       tick();
     };
 
-    const reveal = (el, delay, text, entry) => {
+    // Plays the block wipe on `el`; at its midpoint (word fully covered) the lit state flips to `on`.
+    const animate = (el, { on, delay, text, onDone }) => {
+      const token = (tokens.get(el) ?? 0) + 1;
+      tokens.set(el, token);
+      el.textContent = text;
+      el.classList.remove('cv-hit', 'cv-hit-out');
       if (reducedMotion) {
-        el.classList.add('cv-on');
+        el.classList.toggle('cv-on', on);
+        onDone?.();
         return;
       }
+      void el.offsetWidth; // restart the ::after animation
       el.style.setProperty('--cv-delay', `${delay}ms`);
-      el.classList.add('cv-hit');
-      entry.timers.push(
-        setTimeout(() => {
-          el.classList.add('cv-on');
-          decode(el, text, entry);
-        }, delay + WIPE_HALF_MS),
-      );
+      el.classList.add(on ? 'cv-hit' : 'cv-hit-out');
+      setTimeout(() => {
+        if (tokens.get(el) !== token) return;
+        el.classList.toggle('cv-on', on);
+        decode(el, text, token);
+      }, delay + WIPE_MS / 2);
+      setTimeout(() => {
+        if (tokens.get(el) !== token) return;
+        if (!on) el.classList.remove('cv-hit-out');
+        onDone?.();
+      }, delay + WIPE_MS);
     };
 
+    const stagger = (i) => Math.min(i * STAGGER_MS, MAX_DELAY_MS);
+
     const updateArticles = () => {
-      const matched = articles.filter((a) => a.querySelector('mark.cv-mark, button.cv-chip-match'));
+      const matched = articles.filter((a) => a.querySelector('mark.cv-mark:not(.cv-leaving), button.cv-chip-match'));
       for (const a of articles) {
         a.classList.toggle('cv-article-match', matched.length > 0 && matched.includes(a));
         a.classList.toggle('cv-article-dim', matched.length > 0 && !matched.includes(a));
@@ -172,56 +215,88 @@
       for (const chip of chips) if (chip.dataset.skill === term) chip.setAttribute('aria-pressed', String(pressed));
     };
 
+    const matchingChips = (term) => {
+      const re = termRegExp(term);
+      return chips.filter((chip) => {
+        re.lastIndex = 0;
+        return re.test(chip.dataset.skill);
+      });
+    };
+
     const add = (term) => {
-      const entry = { marks: [], chips: [], timers: [], live: true };
-      selected.set(term, entry);
+      // Re-selected before its off animation finished: drop the leftovers so the text can be re-wrapped.
+      for (const mark of leaving.get(term) ?? []) unwrap(mark);
+      leaving.delete(term);
+
+      const marks = [];
+      selected.set(term, marks);
       setPressed(term, true);
 
-      const re = termRegExp(term);
-      for (const chip of chips) {
-        re.lastIndex = 0;
-        if (!re.test(chip.dataset.skill)) continue;
-        entry.chips.push(chip);
+      const lit = [];
+      for (const chip of matchingChips(term)) {
         const hits = (chipHits.get(chip) ?? 0) + 1;
         chipHits.set(chip, hits);
         chip.classList.add('cv-chip-match');
+        if (hits === 1) lit.push(chip);
       }
-      for (const node of textNodes()) wrapMatches(node, re, entry.marks);
+      for (const node of textNodes()) wrapMatches(node, termRegExp(term), marks);
 
-      // Left-column hits light up top-to-bottom in document order; the skills panel lights up at once.
+      // Left column lights up top-to-bottom; the skills panel at once.
       const cascade = [...left.querySelectorAll('mark.cv-mark, button.cv-chip-match')].filter(
-        (el) => entry.marks.includes(el) || (entry.chips.includes(el) && chipHits.get(el) === 1),
+        (el) => marks.includes(el) || lit.includes(el),
       );
       cascade.forEach((el, i) => {
-        reveal(el, Math.min(i * STAGGER_MS, MAX_DELAY_MS), el.dataset.text ?? labels.get(el), entry);
+        animate(el, { on: true, delay: stagger(i), text: el.dataset.text ?? labels.get(el) });
       });
-      for (const chip of entry.chips) {
-        if (skills.contains(chip) && chipHits.get(chip) === 1) reveal(chip, 0, labels.get(chip), entry);
+      for (const chip of lit) {
+        if (skills.contains(chip)) animate(chip, { on: true, delay: 0, text: labels.get(chip) });
       }
       updateArticles();
     };
 
     const remove = (term) => {
-      const entry = selected.get(term);
+      const marks = selected.get(term);
       selected.delete(term);
-      entry.live = false;
-      for (const t of entry.timers) clearTimeout(t);
       setPressed(term, false);
 
-      for (const mark of entry.marks) {
-        const parent = mark.parentNode;
-        mark.replaceWith(mark.dataset.text);
-        parent?.normalize();
-      }
-      for (const chip of entry.chips) {
+      const dark = [];
+      for (const chip of matchingChips(term)) {
         const hits = chipHits.get(chip) - 1;
-        chipHits.set(chip, hits);
-        if (hits > 0) continue;
+        if (hits > 0) {
+          chipHits.set(chip, hits);
+          continue;
+        }
         chipHits.delete(chip);
-        chip.classList.remove('cv-chip-match', 'cv-hit', 'cv-on');
-        chip.textContent = labels.get(chip);
+        chip.classList.remove('cv-chip-match');
+        dark.push(chip);
       }
-      updateArticles();
+      for (const mark of marks) mark.classList.add('cv-leaving');
+      leaving.set(term, marks);
+
+      // Mirror of `add`: bottom-to-top.
+      const cascade = [...left.querySelectorAll('mark.cv-mark, button')]
+        .filter((el) => marks.includes(el) || dark.includes(el))
+        .reverse();
+      cascade.forEach((el, i) => {
+        const isMark = el.tagName === 'MARK';
+        animate(el, {
+          on: false,
+          delay: stagger(i),
+          text: isMark ? el.dataset.text : labels.get(el),
+          onDone: isMark
+            ? () => {
+                unwrap(el);
+                const rest = leaving.get(term);
+                if (rest && rest.every((m) => !m.isConnected)) leaving.delete(term);
+              }
+            : undefined,
+        });
+      });
+      for (const chip of dark) {
+        if (skills.contains(chip)) animate(chip, { on: false, delay: 0, text: labels.get(chip) });
+      }
+      // Keep cards lit until the off wave has played, so it isn't hidden behind the dimming.
+      setTimeout(updateArticles, reducedMotion ? 0 : stagger(cascade.length - 1) + WIPE_MS);
     };
 
     const toggle = (chip) => {
