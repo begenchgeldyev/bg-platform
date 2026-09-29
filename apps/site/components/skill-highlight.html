@@ -1,18 +1,60 @@
 <style>
-  a.cv-skill-active,
-  a.cv-tag-match {
+  mark.cv-mark {
+    background: transparent;
+    color: inherit;
+    white-space: nowrap;
+  }
+  .cv-hit {
+    position: relative;
+  }
+  /* Terminal-selection block: wipes in from the left, then out to the right, revealing the lit state. */
+  .cv-hit::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    z-index: 1;
+    pointer-events: none;
+    background: #00ff41;
+    box-shadow: 0 0 12px rgba(0, 255, 65, 0.8);
+    transform: scaleX(0);
+    animation: cv-wipe 560ms cubic-bezier(0.7, 0, 0.3, 1) var(--cv-delay, 0ms) both;
+  }
+  @keyframes cv-wipe {
+    0% { transform: scaleX(0); transform-origin: left; }
+    50% { transform: scaleX(1); transform-origin: left; }
+    50.01% { transform: scaleX(1); transform-origin: right; }
+    100% { transform: scaleX(0); transform-origin: right; }
+  }
+  mark.cv-on {
+    color: #00ff41;
+    background-color: rgba(0, 255, 65, 0.14);
+    text-shadow: 0 0 8px rgba(0, 255, 65, 0.65);
+    animation: cv-glow 900ms ease-out;
+  }
+  button.cv-on {
     color: #00ff41;
     border-color: #00ff41;
     background-color: rgba(0, 255, 65, 0.12);
+    text-shadow: 0 0 8px rgba(0, 255, 65, 0.65);
+    box-shadow: 0 0 10px -2px rgba(0, 255, 65, 0.6);
+    animation: cv-glow 900ms ease-out;
+  }
+  @keyframes cv-glow {
+    0% { text-shadow: 0 0 16px #00ff41, 0 0 4px #00ff41; }
+  }
+  [data-cv-left] article {
+    transition: opacity 250ms, border-color 250ms, box-shadow 250ms;
   }
   article.cv-article-match {
     border-left-color: #00ff41;
+    box-shadow: -8px 0 14px -10px #00ff41;
   }
   article.cv-article-dim {
     opacity: 0.35;
   }
-  article {
-    transition: opacity 150ms, border-color 150ms;
+  @media (prefers-reduced-motion: reduce) {
+    .cv-hit::after { display: none; }
+    mark.cv-on, button.cv-on { animation: none; }
   }
 </style>
 <script>
@@ -21,57 +63,184 @@
     const skills = document.querySelector('[data-cv-skills]');
     if (!left || !skills) return;
 
-    const tagsByHref = new Map();
-    for (const tag of left.querySelectorAll('article .flex-wrap a[href]')) {
-      const href = tag.getAttribute('href');
-      if (!tagsByHref.has(href)) tagsByHref.set(href, []);
-      tagsByHref.get(href).push(tag);
+    const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const WIPE_HALF_MS = 280;
+    const STAGGER_MS = 45;
+    const MAX_DELAY_MS = 700;
+    const GLYPHS = '!<>-_\\/[]{}—=+*^?#';
+
+    const articles = [...left.querySelectorAll('article')];
+    const chips = [...left.querySelectorAll('article .flex-wrap button'), ...skills.querySelectorAll('button')];
+    // Captured up front: tag-scramble rewrites textContent while hovering.
+    const labels = new Map(chips.map((chip) => [chip, chip.textContent]));
+    for (const chip of chips) {
+      chip.dataset.skill ||= chip.textContent.trim();
+      chip.setAttribute('aria-pressed', 'false');
     }
-    const taggedArticles = [...left.querySelectorAll('article')].filter((a) => a.querySelector('.flex-wrap a[href]'));
 
-    let active = null;
+    // term -> { marks, chips, timers, live }
+    const selected = new Map();
+    // chip -> number of selected terms that match it
+    const chipHits = new Map();
 
-    const clear = () => {
-      for (const el of left.querySelectorAll('.cv-tag-match')) el.classList.remove('cv-tag-match');
-      for (const a of taggedArticles) a.classList.remove('cv-article-match', 'cv-article-dim');
-      if (active) {
-        active.classList.remove('cv-skill-active');
-        active.setAttribute('aria-pressed', 'false');
-      }
-      active = null;
+    const termRegExp = (term) => {
+      const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, (c) => `\\${c}`);
+      return new RegExp(`(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])`, 'gu');
     };
 
-    const select = (skill) => {
-      const wasActive = skill === active;
-      clear();
-      if (wasActive) return;
-      active = skill;
-      skill.classList.add('cv-skill-active');
-      skill.setAttribute('aria-pressed', 'true');
-      const matches = tagsByHref.get(skill.getAttribute('href'));
-      for (const tag of matches) tag.classList.add('cv-tag-match');
-      for (const a of taggedArticles) {
-        a.classList.add(matches.some((t) => a.contains(t)) ? 'cv-article-match' : 'cv-article-dim');
+    const textNodes = () => {
+      const nodes = [];
+      for (const article of articles) {
+        const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT, {
+          acceptNode: (n) =>
+            n.parentElement.closest('.flex-wrap, mark.cv-mark') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+        });
+        while (walker.nextNode()) nodes.push(walker.currentNode);
       }
+      return nodes;
     };
 
-    const isPlainClick = (e) => e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
+    const wrapMatches = (node, re, marks) => {
+      const text = node.nodeValue;
+      const fragment = document.createDocumentFragment();
+      let last = 0;
+      for (const m of text.matchAll(re)) {
+        fragment.append(text.slice(last, m.index));
+        const mark = document.createElement('mark');
+        mark.className = 'cv-mark';
+        mark.textContent = m[0];
+        mark.dataset.text = m[0];
+        fragment.append(mark);
+        marks.push(mark);
+        last = m.index + m[0].length;
+      }
+      if (last === 0) return;
+      fragment.append(text.slice(last));
+      node.replaceWith(fragment);
+    };
 
-    for (const skill of skills.querySelectorAll('a[href]')) {
-      if (!tagsByHref.has(skill.getAttribute('href'))) continue;
-      skill.setAttribute('aria-pressed', 'false');
-      skill.addEventListener('mousedown', (e) => {
-        if (isPlainClick(e)) select(skill);
+    const decode = (el, text, entry) => {
+      const queue = [...text].map((ch) => {
+        const start = Math.floor(Math.random() * 5);
+        return { ch, start, end: start + 4 + Math.floor(Math.random() * 6) };
       });
-      skill.addEventListener('click', (e) => {
-        if (!isPlainClick(e)) return;
-        e.preventDefault();
-        if (e.detail === 0) select(skill);
+      let frame = 0;
+      const tick = () => {
+        if (!entry.live || !el.isConnected) return;
+        let done = 0;
+        el.textContent = queue
+          .map(({ ch, start, end }) => {
+            if (ch === ' ' || frame >= end) {
+              done++;
+              return ch;
+            }
+            return frame >= start ? GLYPHS[Math.floor(Math.random() * GLYPHS.length)] : ch;
+          })
+          .join('');
+        if (done < queue.length) {
+          frame++;
+          requestAnimationFrame(tick);
+        }
+      };
+      tick();
+    };
+
+    const reveal = (el, delay, text, entry) => {
+      if (reducedMotion) {
+        el.classList.add('cv-on');
+        return;
+      }
+      el.style.setProperty('--cv-delay', `${delay}ms`);
+      el.classList.add('cv-hit');
+      entry.timers.push(
+        setTimeout(() => {
+          el.classList.add('cv-on');
+          decode(el, text, entry);
+        }, delay + WIPE_HALF_MS),
+      );
+    };
+
+    const updateArticles = () => {
+      const matched = articles.filter((a) => a.querySelector('mark.cv-mark, button.cv-chip-match'));
+      for (const a of articles) {
+        a.classList.toggle('cv-article-match', matched.length > 0 && matched.includes(a));
+        a.classList.toggle('cv-article-dim', matched.length > 0 && !matched.includes(a));
+      }
+    };
+
+    const setPressed = (term, pressed) => {
+      for (const chip of chips) if (chip.dataset.skill === term) chip.setAttribute('aria-pressed', String(pressed));
+    };
+
+    const add = (term) => {
+      const entry = { marks: [], chips: [], timers: [], live: true };
+      selected.set(term, entry);
+      setPressed(term, true);
+
+      const re = termRegExp(term);
+      for (const chip of chips) {
+        re.lastIndex = 0;
+        if (!re.test(chip.dataset.skill)) continue;
+        entry.chips.push(chip);
+        const hits = (chipHits.get(chip) ?? 0) + 1;
+        chipHits.set(chip, hits);
+        chip.classList.add('cv-chip-match');
+      }
+      for (const node of textNodes()) wrapMatches(node, re, entry.marks);
+
+      // Left-column hits light up top-to-bottom in document order; the skills panel lights up at once.
+      const cascade = [...left.querySelectorAll('mark.cv-mark, button.cv-chip-match')].filter(
+        (el) => entry.marks.includes(el) || (entry.chips.includes(el) && chipHits.get(el) === 1),
+      );
+      cascade.forEach((el, i) => {
+        reveal(el, Math.min(i * STAGGER_MS, MAX_DELAY_MS), el.dataset.text ?? labels.get(el), entry);
+      });
+      for (const chip of entry.chips) {
+        if (skills.contains(chip) && chipHits.get(chip) === 1) reveal(chip, 0, labels.get(chip), entry);
+      }
+      updateArticles();
+    };
+
+    const remove = (term) => {
+      const entry = selected.get(term);
+      selected.delete(term);
+      entry.live = false;
+      for (const t of entry.timers) clearTimeout(t);
+      setPressed(term, false);
+
+      for (const mark of entry.marks) {
+        const parent = mark.parentNode;
+        mark.replaceWith(mark.dataset.text);
+        parent?.normalize();
+      }
+      for (const chip of entry.chips) {
+        const hits = chipHits.get(chip) - 1;
+        chipHits.set(chip, hits);
+        if (hits > 0) continue;
+        chipHits.delete(chip);
+        chip.classList.remove('cv-chip-match', 'cv-hit', 'cv-on');
+        chip.textContent = labels.get(chip);
+      }
+      updateArticles();
+    };
+
+    const toggle = (chip) => {
+      const term = chip.dataset.skill;
+      if (selected.has(term)) remove(term);
+      else add(term);
+    };
+
+    for (const chip of chips) {
+      chip.addEventListener('mousedown', (e) => {
+        if (e.button === 0) toggle(chip);
+      });
+      chip.addEventListener('click', (e) => {
+        if (e.detail === 0) toggle(chip);
       });
     }
 
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') clear();
+      if (e.key === 'Escape') for (const term of [...selected.keys()]) remove(term);
     });
   })();
 </script>

@@ -1,7 +1,7 @@
 <script>
   (() => {
     const chars = '!<>-_\\/[]{}—=+*^?#________';
-    const tags = document.querySelectorAll('a[class*="border-outline"]');
+    const tags = document.querySelectorAll('a[class*="border-outline"], button[class*="border-outline"]');
     tags.forEach((el) => {
       const original = el.textContent;
       let frame = 0;
