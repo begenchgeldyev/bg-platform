@@ -65,6 +65,10 @@ Frontend uses **HTMX** (no React/Vue). Styling uses **Tailwind CSS from CDN** wi
 
 Use `onMouseDown` instead of `onClick` for interactive controls so UI actions feel more immediate. Preserve keyboard and accessibility behavior when a control needs it.
 
+### htmx
+
+The site runs **htmx 4**, so write htmx 4 syntax: colon-separated events (`htmx:config:request`, with request headers at `event.detail.ctx.request.headers`) and explicit attribute inheritance (`hx-target:inherited="…"`). Global htmx config lives in the `<meta name="htmx-config">` in `shared-head.html`; its `noSwap` keeps 4xx/5xx response bodies out of the page, as htmx 2 did.
+
 ### Dependency injection
 
 `packages/core/DIContainer.ts` is a hand-rolled singleton DI container. Classes decorated with `@Injectable()` or registered via `container.registerFactory()` are resolved lazily and cached as singletons.
