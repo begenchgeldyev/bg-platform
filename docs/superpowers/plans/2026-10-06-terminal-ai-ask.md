@@ -19,6 +19,8 @@
 - Error bodies are `{ "error": "<message>" }`: 400 `<reason>`, 429 `rate limit reached, try again in a few minutes` + `Retry-After`, 503 `assistant is offline`. Mid-stream errors reach the client as `The assistant hit an error. Try again later.`
 - `apps/site/tsconfig.json` has no DOM lib: browser code in `apps/site/client/` must not use `window`/`document`; it publishes through `globalThis`.
 - Bun only (`bun test`, `bun add`, `bunx biome`). Format each touched TS file with `bunx biome check --write <file>` — never `bun run format` (it would rewrite unrelated files).
+- Type gate: `bunx tsc --noEmit -p apps/site/tsconfig.json` (run from the repo root) already reports 6 errors before this work (`apps/site/server.ts` lines 14/26/27/30 and `packages/core/abac/pep.ts`). A task passes when the count is still 6 and no error names a file the task created or a line it added. `lsp_diagnostics` does not show these errors, so run tsc.
+- `apps/site/.env` (gitignored; holds the QA key) is created by the controller. Implementers never create, print or commit it.
 - The working tree holds the owner's unrelated uncommitted work (`CLAUDE.md` line 62, `apps/site/components/shared-head.html`, `apps/site/components/tag-scramble.html`, `apps/site/site.ts`, untracked `apps/site/public/fonts/`). Never stage, revert or commit it. Never commit secrets.
 
 ## File Structure
@@ -373,6 +375,23 @@ describe('AskController', () => {
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ error: 'assistant is offline' });
   });
+
+  test('hides provider errors behind a generic message', async () => {
+    const failing = new MockLanguageModelV4({
+      doStream: async () => ({
+        stream: simulateReadableStream({
+          chunks: [
+            { type: 'stream-start' as const, warnings: [] },
+            { type: 'error' as const, error: new Error('provider exploded: internal detail') },
+          ],
+        }),
+      }),
+    });
+    const res = await controller({ model: failing }).handle(post({ messages: [message('user', 'hi')] }), '1.1.1.1');
+    const body = await res.text();
+    expect(body).toContain('"errorText":"The assistant hit an error. Try again later."');
+    expect(body).not.toContain('provider exploded');
+  });
 });
 ```
 
@@ -471,6 +490,9 @@ export class AskController {
       });
     }
 
+    if (Number(req.headers.get('content-length') ?? 0) > ASK_LIMITS.maxBodyBytes) {
+      return errorResponse(400, 'request is too large');
+    }
     const raw = await req.text();
     if (new TextEncoder().encode(raw).byteLength > ASK_LIMITS.maxBodyBytes) {
       return errorResponse(400, 'request is too large');
@@ -511,7 +533,7 @@ export class AskController {
 
 - [ ] **Step 6: Run the tests to verify they pass**
 
-Run: `bun test ask/` → Expected: all `ask/` tests pass (5 controller + 2 + 3). Run `bunx biome check --write ask/instructions.ts ask/ask.controller.ts ask/ask.controller.test.ts` and check `lsp_diagnostics` on the three files: no errors. If TypeScript rejects the mock chunk literals, annotate `simulateReadableStream<…>` with the stream-part type that `MockLanguageModelV4`'s `doStream` expects rather than loosening types.
+Run: `bun test ask/` → Expected: all `ask/` tests pass (6 controller + 2 + 3). Run `bunx biome check --write ask/instructions.ts ask/ask.controller.ts ask/ask.controller.test.ts` and the type gate (Global Constraints). If TypeScript rejects the mock chunk literals, annotate `simulateReadableStream<…>` with the stream-part type that `MockLanguageModelV4`'s `doStream` expects rather than loosening types.
 
 - [ ] **Step 7: Commit**
 
@@ -575,14 +597,14 @@ OPENAI_MODEL=gpt-5.4-mini
 
 - [ ] **Step 4: Verify on the running server**
 
-Run `bunx biome check --write app-container.ts server.ts` and `lsp_diagnostics` on both (no errors). Start the server without a key: `PORT=18613 bun server.ts` (from `apps/site`, with `OPENAI_API_KEY` unset), then:
+Run `bunx biome check --write app-container.ts server.ts` and the type gate (Global Constraints). Start the server with the key explicitly empty — an empty variable overrides `apps/site/.env`: `OPENAI_API_KEY= PORT=18613 bun server.ts` (from `apps/site`), then:
 
 ```bash
 curl -s -X POST http://127.0.0.1:18613/api/ask -H 'Content-Type: application/json' -d '{}' -w ' %{http_code}\n'
 ```
 Expected: `{"error":"assistant is offline"} 503`.
 
-Restart with the QA relay settings in the gitignored `apps/site/.env` (`OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`, see Task 8) and run:
+Restart with `PORT=18613 bun server.ts`, which loads the controller-provided `apps/site/.env` (`OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`), and run:
 
 ```bash
 curl -s -X POST http://127.0.0.1:18613/api/ask -H 'Content-Type: application/json' -d 'nope' -w ' %{http_code}\n'
@@ -674,7 +696,7 @@ describe('createAskChat', () => {
     const first = await ask(chat, 'What does Begench do?');
     expect(first.error).toBeUndefined();
     expect(first.texts.at(-1)).toBe('Begench builds web apps.');
-    expect(first.texts.length).toBeGreaterThan(1);
+    expect(first.texts).toContain('Begench builds ');
     await ask(chat, 'Since when?');
     expect(model.doStreamCalls.at(-1)?.prompt.map((entry) => entry.role)).toEqual(['system', 'user', 'assistant', 'user']);
   });
@@ -781,6 +803,7 @@ export function createAskChat({ api }: { api: string }): AskChat {
   return {
     busy: () => chat.status === 'submitted' || chat.status === 'streaming',
     async ask(question, next) {
+      const before = chat.messages.length;
       handlers = next;
       await chat.sendMessage({ text: question });
       handlers = null;
@@ -789,9 +812,7 @@ export function createAskChat({ api }: { api: string }): AskChat {
         return;
       }
       const message = errorMessage(chat.error);
-      if (chat.lastMessage?.role === 'user') {
-        chat.messages = chat.messages.slice(0, -1);
-      }
+      chat.messages = chat.messages.slice(0, before);
       chat.clearError();
       next.onError(message);
     },
@@ -809,7 +830,7 @@ import { type AskChat, createAskChat } from './ask-chat';
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `bun test client/ask-chat.test.ts` → Expected: 2 pass. Run `bunx biome check --write client/ask-chat.ts client/main.ts client/ask-chat.test.ts` and `lsp_diagnostics` on the three files: no errors.
+Run: `bun test client/ask-chat.test.ts` → Expected: 2 pass. Run `bunx biome check --write client/ask-chat.ts client/main.ts client/ask-chat.test.ts` and the type gate (Global Constraints).
 
 - [ ] **Step 6: Commit**
 
@@ -915,7 +936,7 @@ and replace the trailing `{}` argument of `Object.assign(withPrefix('/api', { �
 
 - [ ] **Step 5: Run the tests and verify the route**
 
-Run: `bun test client-bundle.test.ts` → Expected: 2 pass (the 503 case logs one expected build error). `bunx biome check --write client-bundle.ts client-bundle.test.ts server.ts`; `lsp_diagnostics` clean. With the server running:
+Run: `bun test client-bundle.test.ts` → Expected: 2 pass (the 503 case logs one expected build error). `bunx biome check --write client-bundle.ts client-bundle.test.ts server.ts`; type gate (Global Constraints). With the server running:
 
 ```bash
 curl -s -o /dev/null -D - http://127.0.0.1:18613/assets/ask-chat.js | grep -i -E '^(HTTP|content-type|etag|cache-control)'
@@ -934,7 +955,7 @@ GIT_MASTER=1 git commit -m "feat(ask): bundle the chat client at startup and ser
 ### Task 7: Terminal command and docs
 
 **Files:**
-- Modify: `apps/site/components/terminal-emulator.html`, `CLAUDE.md`
+- Modify: `apps/site/components/terminal-emulator.html` (`CLAUDE.md` text is listed for the controller)
 
 **Interfaces:**
 - Consumes: `globalThis.askChat` (`busy()`, `ask(question, { onText, onDone, onError })`).
@@ -992,9 +1013,20 @@ GIT_MASTER=1 git commit -m "feat(ask): bundle the chat client at startup and ser
 				},
 ```
 
-- [ ] **Step 4: Verify in a browser** — server running with the QA relay env; on `/`, type `help` (lists `ask [question]`), `ask` (usage line), `ask what did you build at Synecta?` (an `assistant:` line streams text and the cursor disappears at the end). Console: no errors. (Full scenario list in Task 8.)
+- [ ] **Step 4: Verify the markup** — start `PORT=18613 bun server.ts` (from `apps/site`) and run
+`curl -s http://127.0.0.1:18613/ | grep -c -E 'assets/ask-chat.js|ask\(args\)|ask \[question\]'` → expect `3`.
+The controller runs the real-browser scenarios in Task 8.
 
-- [ ] **Step 5: Document** — in `CLAUDE.md`, after the `### htmx` section, add:
+- [ ] **Step 5: Commit**
+
+```bash
+GIT_MASTER=1 git add apps/site/components/terminal-emulator.html
+GIT_MASTER=1 git commit -m "feat(ask): add the ask command to the home terminal"
+```
+
+`CLAUDE.md` is not edited in this task: the owner's `main` checkout holds an uncommitted edit to it, so the
+controller adds this section on `main` after the merge (`docs: document the terminal AI assistant in CLAUDE.md`),
+right after the `### htmx` section:
 
 ```md
 ### AI assistant
@@ -1002,42 +1034,23 @@ GIT_MASTER=1 git commit -m "feat(ask): bundle the chat client at startup and ser
 The home-page terminal's `ask <question>` command chats with an OpenAI model through AI SDK 7 (`ai`, `@ai-sdk/openai`). `apps/site/ask/` is the server side: `AskController` (registered in `app-container.ts`, routed at `POST /api/ask`) grounds every answer in the CV text from `pages/cv.html`, validates the AI SDK UI messages, and rate-limits per client IP. `apps/site/client/` is the browser side (AI SDK `AbstractChat`); `server.ts` bundles it with `Bun.build` at startup and serves it from memory at `/assets/ask-chat.js`. Config: `OPENAI_API_KEY` (the feature is off without it), `OPENAI_MODEL` (default `gpt-5.4-mini`), optional `OPENAI_BASE_URL`.
 ```
 
-- [ ] **Step 6: Commit (two commits; `CLAUDE.md` carries the owner's unrelated line-62 edit, so stage only this section from a HEAD-based copy)**
-
-```bash
-GIT_MASTER=1 git add apps/site/components/terminal-emulator.html
-GIT_MASTER=1 git commit -m "feat(ask): add the ask command to the home terminal"
-# CLAUDE.md: HEAD copy + the new section only
-GIT_MASTER=1 git show HEAD:CLAUDE.md > /tmp/opencode/CLAUDE.head.md
-# insert the "### AI assistant" section after the "### htmx" paragraph in /tmp/opencode/CLAUDE.head.md (same text as Step 5)
-GIT_MASTER=1 git update-index --cacheinfo 100644,$(GIT_MASTER=1 git hash-object -w /tmp/opencode/CLAUDE.head.md),CLAUDE.md
-GIT_MASTER=1 git diff --cached | grep -c OpenTUI   # expect 0
-GIT_MASTER=1 git commit -m "docs: document the terminal AI assistant in CLAUDE.md"
-```
-
 ---
 
-### Task 8: QA and teardown
+### Task 8: QA and teardown (controller)
 
-- [ ] **Step 1: Local QA env** — write the gitignored `apps/site/.env` (the owner approved the relay for local QA only; never print the key):
+- [ ] **Step 1: Local QA env** — done by the controller before Task 4: the gitignored `apps/site/.env` holds
+`OPENAI_API_KEY` and `OPENAI_BASE_URL` read from the local opencode relay config (owner-approved, local
+only, never printed or committed), `OPENAI_MODEL=gpt-5.6-luna` and `ADMIN_SECRET=qa-secret`; `chmod 600`;
+`git check-ignore apps/site/.env` passes.
 
-```bash
-python3 - <<'PY'
-import json, os
-o = json.load(open(os.path.expanduser('~/.config/opencode/opencode.json')))['provider']['openai']['options']
-open('apps/site/.env', 'w').write(f"OPENAI_API_KEY={o['apiKey']}\nOPENAI_BASE_URL=http://46.8.254.240:8317/v1\nOPENAI_MODEL=gpt-5.6-luna\nADMIN_SECRET=qa-secret\n")
-PY
-chmod 600 apps/site/.env && git check-ignore apps/site/.env
-```
-
-- [ ] **Step 2: Real-browser scenarios** (headless Chromium via the browser skill's owned engine; server on port 18613):
+- [ ] **Step 2: Real-browser scenarios** (headless Chromium via the browser skill's owned engine; always `http://127.0.0.1:18613`, never `localhost`, so curl and the browser share one rate-limit key):
   - S1 `/`: `ask what did you build at Synecta?` → the answer streams (several distinct texts observed) and names Synecta; the cursor disappears.
   - S2 follow-up `ask and what did he do before that?` → names AdHaven (context carried).
   - S3 switch to Russian with the header toggle, then `ask где сейчас работает Бегенч?` → Cyrillic answer.
   - S4 `ask write me a poem about cats` → a polite decline.
   - S5 send POSTs to `/api/ask` with `curl` until the 10-per-10-minutes budget for 127.0.0.1 is used up, then `ask hi` → `ask: rate limit reached, try again in a few minutes`.
-  - S6 restart without `OPENAI_API_KEY` → `ask hi` → `ask: assistant is offline`.
+  - S6 restart with `OPENAI_API_KEY=` (empty overrides `.env`) → `ask hi` → `ask: assistant is offline`.
   - S7 `/assets/ask-chat.js` → 200 with ETag; a reload revalidates with 304.
   - S8 `help`, `whoami`, `ls`, `clear` still work on `/` in English and in Russian; `/cv` and `/projects` load; no console errors anywhere.
-- [ ] **Step 3: Gates** — `bun test` (all green), `bunx biome check` on every touched file (no new diagnostics vs. the pre-change baseline), `lsp_diagnostics` clean.
+- [ ] **Step 3: Gates** — `bun test` (all green), `bunx biome check` on every touched file (no new diagnostics vs. the pre-change baseline), type gate (Global Constraints).
 - [ ] **Step 4: Teardown** — stop the dev server and browser profiles; remove `/tmp/opencode/aisdk`, QA scripts and temp files; keep `apps/site/.env` (owner-approved local config).
