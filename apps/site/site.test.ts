@@ -89,3 +89,14 @@ describe('russian fragments', () => {
     expect(html).toContain('terminal-display');
   });
 });
+
+describe('htmx setup', () => {
+  test('configures htmx 4 before it loads so 4xx/5xx responses are not swapped, as in htmx 2', async () => {
+    const res = await renderPage('/projects', 'en');
+    const html = await (res as Response).text();
+    const config = html.match(/<meta name="htmx-config" content='([^']+)'>/)?.[1];
+    expect(config).toBeDefined();
+    expect(JSON.parse(config ?? '{}')).toEqual({ noSwap: [204, 304, '4xx', '5xx'] });
+    expect(html.indexOf('name="htmx-config"')).toBeLessThan(html.indexOf('htmx.org@4.0.0'));
+  });
+});

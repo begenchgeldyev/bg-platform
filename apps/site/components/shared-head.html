@@ -1,5 +1,10 @@
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<script src="https://unpkg.com/htmx.org@2.0.4"></script>
+<!-- Like htmx 2, don't swap 4xx/5xx response bodies into the page. htmx reads this once on load: keep it above the script. -->
+<meta name="htmx-config" content='{"noSwap": [204, 304, "4xx", "5xx"]}'>
+<script
+  src="https://cdn.jsdelivr.net/npm/htmx.org@4.0.0/dist/htmx.min.js"
+  integrity="sha384-BvJpBiO8Kh31EqtJe5DRIeWrHWnCGkwytKs9NKFi86Hhw96dEqdEMzZDeK9iEGTc"
+  crossorigin="anonymous"></script>
 <link
   href="https://fonts.googleapis.com/css2?family=Noto+Sans+Mono:wght@100..900&display=swap"
   rel="stylesheet">
@@ -12,9 +17,9 @@ if (window.__DEV_USER_EMAIL__) {
   document.cookie = `dev-user-email=${encodeURIComponent(window.__DEV_USER_EMAIL__)}; path=/; SameSite=Lax`;
 }
 
-document.addEventListener('htmx:configRequest', (event) => {
+document.addEventListener('htmx:config:request', (event) => {
   if (window.__DEV_USER_EMAIL__) {
-    event.detail.headers['x-user-email'] = window.__DEV_USER_EMAIL__;
+    event.detail.ctx.request.headers['x-user-email'] = window.__DEV_USER_EMAIL__;
   }
 });
 
