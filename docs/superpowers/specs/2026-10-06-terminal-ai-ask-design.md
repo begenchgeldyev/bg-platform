@@ -38,7 +38,7 @@ by an OpenAI model through the AI SDK and grounded only in the CV. Follow-up
   `user`/`assistant` roles, the last message must be the user's and contain
   text, body at most 32 KB (read incrementally, so a body without
   `Content-Length` is cut off at the limit), `maxOutputTokens: 500`, 10 asks per
-  10 minutes per client IP, and only same-origin JSON requests.
+  10 minutes per client IP, and only JSON requests that are not cross-site.
 - **Failures:** 400 invalid request, 403 cross-site request, 415 not JSON,
   429 rate limited (with `Retry-After`), 503 no key configured. Each body is `{ "error": "<short human message>" }`,
   which the terminal prints. Provider errors mid-stream reach the client as a
