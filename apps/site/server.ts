@@ -2,12 +2,14 @@ import { canAccess, enforce, resolveEmail } from '@bg/core/abac/pep';
 import type { Server } from 'bun';
 import { container } from './app-container';
 import { AskController } from './ask/ask.controller';
+import { buildClientBundle, serveClientBundle } from './client-bundle';
 import { resolveLang } from './i18n';
 import { handleLangRequest } from './lang-route';
 import { ProjectController } from './project/project.controller';
 import { renderPage, servePublicAsset } from './site';
 
 const PORT = Number(process.env.PORT) || 8613;
+const askChatBundle = await buildClientBundle();
 
 function withPrefix<T>(prefix: string, routes: Record<string, T>): Record<string, T> {
   return Object.fromEntries(Object.entries(routes).map(([path, handler]) => [`${prefix}${path}`, handler]));
@@ -63,7 +65,9 @@ Bun.serve({
         },
       },
     }),
-    {},
+    {
+      '/assets/ask-chat.js': (req: Request) => serveClientBundle(req, askChatBundle),
+    },
   ),
 
   async fetch(req) {
