@@ -71,7 +71,7 @@ The site runs **htmx 4**, so write htmx 4 syntax: colon-separated events (`htmx:
 
 ### AI assistant
 
-The home-page terminal's `ask <question>` command chats with an OpenAI model through AI SDK 7 (`ai`, `@ai-sdk/openai`). `apps/site/ask/` is the server side: `AskController` (registered in `app-container.ts`, routed at `POST /api/ask`) grounds every answer in the CV text from `pages/cv.html`, validates the AI SDK UI messages, resends history as plain text, and rate-limits per client IP. `apps/site/client/` is the browser side (AI SDK `AbstractChat`); `server.ts` bundles it with `Bun.build` at startup and serves it from memory at `/assets/ask-chat.js`. Config: `OPENAI_API_KEY` (the feature is off without it), `OPENAI_MODEL` (default `gpt-5.4-mini`), optional `OPENAI_BASE_URL`.
+The home-page terminal's `ask <question>` command chats with an OpenAI model through AI SDK 7 (`ai`, `@ai-sdk/openai`). `apps/site/ask/` is the server side: `AskController` (registered in `app-container.ts`, routed at `POST /api/ask`) grounds every answer in the CV text from `pages/cv.html`, accepts only same-origin JSON, validates the AI SDK UI messages, resends history as plain text, and rate-limits per client IP. `apps/site/client/` is the browser side (AI SDK `AbstractChat`); `server.ts` bundles it with `Bun.build` at startup and serves it from memory at `/assets/ask-chat.js`. Config: `OPENAI_API_KEY` (the feature is off without it), `OPENAI_MODEL` (default `gpt-5.4-mini`), optional `OPENAI_BASE_URL`.
 
 ### Dependency injection
 

@@ -1,7 +1,7 @@
 # Terminal AI chat (`ask`)
 
 Date: 2026-10-06
-Status: approved design, not yet implemented
+Status: implemented and deployed (assistant offline until `OPENAI_API_KEY` is set)
 
 ## Goal
 
@@ -14,8 +14,9 @@ by an OpenAI model through the AI SDK and grounded only in the CV. Follow-up
 
 - **Surface:** the existing terminal in `components/terminal-emulator.html`
   (included by `index.html` and `index.ru.html`) gets one new command,
-  `ask <question>`. No mode switch; `help` lists it and Tab completion picks it
-  up from `COMMANDS`.
+  `ask <question>` (written `ask [question]` in `help` and the usage line, like
+  `cat [file]`). No mode switch; `help` lists it and Tab completion picks it up
+  from `COMMANDS`.
 - **Memory:** one conversation per page visit. `clear` only clears the screen;
   a reload starts a new conversation.
 - **Stack:** AI SDK 7 (`ai@^7.0.128`) with the OpenAI provider
@@ -34,10 +35,12 @@ by an OpenAI model through the AI SDK and grounded only in the CV. Follow-up
   `OPENAI_BASE_URL` for pointing at a compatible endpoint during local QA.
 - **Limits:** at most 20 messages per request (the client sends its last 20),
   at most 500 characters per question, only `text` and `step-start` parts, only
-  `user`/`assistant` roles, the last message must be the user's, body at most
-  32 KB, `maxOutputTokens: 500`, and 10 asks per 10 minutes per client IP.
-- **Failures:** 400 invalid request, 429 rate limited (with `Retry-After`),
-  503 no key configured. Each body is `{ "error": "<short human message>" }`,
+  `user`/`assistant` roles, the last message must be the user's and contain
+  text, body at most 32 KB (read incrementally, so a body without
+  `Content-Length` is cut off at the limit), `maxOutputTokens: 500`, 10 asks per
+  10 minutes per client IP, and only same-origin JSON requests.
+- **Failures:** 400 invalid request, 403 cross-site request, 415 not JSON,
+  429 rate limited (with `Retry-After`), 503 no key configured. Each body is `{ "error": "<short human message>" }`,
   which the terminal prints. Provider errors mid-stream reach the client as a
   generic message, never the raw provider error.
 - **Production key:** a dedicated OpenAI project key with a monthly budget limit
@@ -69,13 +72,21 @@ by an OpenAI model through the AI SDK and grounded only in the CV. Follow-up
   `{ model: LanguageModel | null, rateLimiter, loadCvText }` and
   `handle(req, clientIp)`:
   1. no model → 503 `assistant is offline`;
-  2. rate limit → 429 `rate limit reached, try again in a few minutes`;
-  3. body over 32 KB, bad JSON, `validateUIMessages` failure or any limit above
+  2. `Sec-Fetch-Site: cross-site` → 403 `cross-site requests are not allowed`;
+     a Content-Type other than `application/json` → 415 `requests must be JSON`.
+     Requiring JSON forces a CORS preflight, which the server never answers, so
+     another site cannot make its visitors' browsers spend model calls. Checked
+     before the rate limit so such requests do not use up a visitor's asks;
+  3. rate limit → 429 `rate limit reached, try again in a few minutes`;
+  4. body over 32 KB, bad JSON, `validateUIMessages` failure or any limit above
      → 400 with the reason;
-  4. `streamText({ model, instructions: buildInstructions(await loadCvText()),
-     messages: await convertToModelMessages(messages), maxOutputTokens: 500,
-     abortSignal: req.signal, onError })`, logging errors server-side;
-  5. `createUIMessageStreamResponse({ stream: toUIMessageStream({ stream:
+  5. `streamText({ model, instructions: buildInstructions(await loadCvText()),
+     messages: await convertToModelMessages(plain-text copy of the messages),
+     maxOutputTokens: 500, abortSignal: req.signal, onError })`, logging errors
+     server-side. History is resent as plain text parts: answers come back from
+     the browser with OpenAI item ids in their provider metadata, and forwarding
+     those makes the provider reference stored items instead of the text;
+  6. `createUIMessageStreamResponse({ stream: toUIMessageStream({ stream:
      result.stream, sendReasoning: false, onError: () => 'The assistant hit an
      error. Try again later.' }) })`. `sendReasoning: false` keeps assistant
      messages text-only, so they pass validation when the client sends them
@@ -88,9 +99,12 @@ by an OpenAI model through the AI SDK and grounded only in the CV. Follow-up
   10-per-10-minutes limiter and `loadCvText`, next to `ProjectController`.
 - `server.ts` adds `'/api/ask': { POST }` under the existing `/api` prefix. The
   client IP is the last `X-Forwarded-For` entry (set by Caddy, the only exposed
-  service), falling back to `server.requestIP(req)`.
+  service), falling back to `server.requestIP(req)`. The route raises the
+  request's idle timeout to 60 s with `server.timeout(req, 60)`: Bun closes a
+  connection after 10 s without data by default, which cut answers whose model
+  took longer than that to send its first token.
 - `server.ts` also serves the browser bundle at `/assets/ask-chat.js`, built in
-  memory at startup with `Bun.build({ entrypoints: ['client/ask-chat.ts'],
+  memory at startup with `Bun.build({ entrypoints: ['client/main.ts'],
   target: 'browser', minify: true })`. Responses carry `Content-Type:
   text/javascript`, `Cache-Control: no-cache` and an `ETag`, and return 304 on a
   matching `If-None-Match`. A failed build is logged and the route answers 503;
@@ -106,23 +120,26 @@ by an OpenAI model through the AI SDK and grounded only in the CV. Follow-up
 - `TerminalChat extends AbstractChat` with `DefaultChatTransport({ api:
   '/api/ask', prepareSendMessagesRequest })` that sends only the last 20
   messages.
-- Exposes `window.askChat = { busy(), ask(question, { onText, onDone, onError }) }`.
+- `client/main.ts` exposes `window.askChat = { busy(), ask(question, { onText,
+  onDone, onError }) }` (through `globalThis`; the site's TypeScript config has
+  no DOM types).
   `onText` receives the assistant's full text so far on each update. On
   `APICallError`, the message comes from the `error` field of the JSON
-  `responseBody`, falling back to a generic message.
+  `responseBody`, falling back to a generic message. A failed turn is rolled
+  back, so the next question starts from a clean history.
 
 ### Terminal: `apps/site/components/terminal-emulator.html`
 
 - Adds `<script type="module" src="/assets/ask-chat.js"></script>`.
 - `COMMANDS.ask(args)`:
-  - no question → `ask: usage — ask <question> (e.g. ask what did you build at Synecta?)`;
+  - no question → `ask: usage — ask [question], e.g. ask what did you build at Synecta?`;
   - `window.askChat` missing → `ask: assistant is unavailable`;
   - `askChat.busy()` → `ask: still answering…`;
   - otherwise appends an `assistant:` line, fills it through `textContent` (no
     HTML injection) as text streams, shows the blinking cursor until done,
     scrolls to the bottom on each update, and prints errors in the terminal's
     existing `err()` style.
-- `help` gains `ask <question>` — "ask an AI about my experience".
+- `help` gains `ask [question]` — "ask an AI about my experience".
 
 ### Config and docs
 
