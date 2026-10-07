@@ -38,6 +38,7 @@ const MIME: Record<string, string> = {
   '.pdf': 'application/pdf',
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
+  '.woff2': 'font/woff2',
 };
 
 const PAGE_CONFIGS: Record<string, PageConfig> = {

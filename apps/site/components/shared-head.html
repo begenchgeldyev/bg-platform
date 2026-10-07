@@ -5,6 +5,8 @@
   src="https://cdn.jsdelivr.net/npm/htmx.org@4.0.0/dist/htmx.min.js"
   integrity="sha384-BvJpBiO8Kh31EqtJe5DRIeWrHWnCGkwytKs9NKFi86Hhw96dEqdEMzZDeK9iEGTc"
   crossorigin="anonymous"></script>
+<link rel="preload" href="/public/fonts/OpenTUIMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/public/fonts/OpenTUIMono-Bold.woff2" as="font" type="font/woff2" crossorigin>
 <link
   href="https://fonts.googleapis.com/css2?family=Noto+Sans+Mono:wght@100..900&display=swap"
   rel="stylesheet">
@@ -35,6 +37,7 @@ window.fetch = (input, init) => {
 </script>
 <script id="tailwind-config">
 const MONO_STACK = [
+  '"OpenTUI Mono"',
   '"Noto Sans Mono"',
   'SFMono-Regular',
   'Menlo',
@@ -110,6 +113,34 @@ tailwind.config = {
 };
 </script>
 <style>
+@font-face {
+  font-family: "OpenTUI Mono";
+  src: url("/public/fonts/OpenTUIMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "OpenTUI Mono";
+  src: url("/public/fonts/OpenTUIMono-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "OpenTUI Mono";
+  src: url("/public/fonts/OpenTUIMono-Italic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "OpenTUI Mono";
+  src: url("/public/fonts/OpenTUIMono-BoldItalic.woff2") format("woff2");
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
 .material-symbols-outlined {
   font-variation-settings:
     "FILL" 0,
@@ -143,7 +174,7 @@ body {
 #terminal-input {
   -webkit-appearance: none;
   appearance: none;
-  font-family: "Noto Sans Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+  font-family: "OpenTUI Mono", "Noto Sans Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
 }
 #terminal-input:focus {
   outline: none;
