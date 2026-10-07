@@ -99,17 +99,22 @@ describe('AskController', () => {
 
   test('rejects malformed requests with a reason', async () => {
     const tooMany = Array.from({ length: 21 }, (_, i) => message(i % 2 ? 'assistant' : 'user', 'hi'));
-    const cases: unknown[] = [
-      'not json',
-      { messages: tooMany },
-      { messages: [message('user', 'x'.repeat(501))] },
-      { messages: [{ id: 'f', role: 'user', parts: [{ type: 'file', mediaType: 'image/png', url: 'data:image/png;base64,AA==' }] }] },
-      { messages: [message('user', 'hi'), message('assistant', 'hello')] },
+    const cases: [unknown, string][] = [
+      ['not json', 'invalid request'],
+      [{ messages: tooMany }, 'send at most 20 messages'],
+      [{ messages: [message('user', 'x'.repeat(501))] }, 'questions are limited to 500 characters'],
+      [
+        { messages: [{ id: 'f', role: 'user', parts: [{ type: 'file', mediaType: 'image/png', url: 'data:image/png;base64,AA==' }] }] },
+        'only text messages are allowed',
+      ],
+      [{ messages: [message('user', 'hi'), message('assistant', 'hello')] }, 'the last message must be a question'],
+      [{ messages: [{ id: 'q', role: 'user', parts: [{ type: 'step-start' }] }] }, 'the last message must be a question'],
+      [{ messages: [message('user', '   ')] }, 'the last message must be a question'],
     ];
-    for (const body of cases) {
+    for (const [body, reason] of cases) {
       const res = await controller().handle(post(body), '1.1.1.1');
       expect(res.status).toBe(400);
-      expect(typeof ((await res.json()) as { error?: unknown }).error).toBe('string');
+      expect(await res.json()).toEqual({ error: reason });
     }
   });
 

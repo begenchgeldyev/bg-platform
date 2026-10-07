@@ -78,7 +78,8 @@ function findLimitViolation(messages: UIMessage[]): string | null {
       return `questions are limited to ${ASK_LIMITS.maxQuestionChars} characters`;
     }
   }
-  if (messages.at(-1)?.role !== 'user') {
+  const last = messages.at(-1);
+  if (last?.role !== 'user' || !messageText(last).trim()) {
     return 'the last message must be a question';
   }
   return null;
