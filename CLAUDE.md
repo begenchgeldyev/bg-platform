@@ -59,7 +59,7 @@ The single Bun server (`apps/site/server.ts`) handles everything:
 
 Page fragments live in `apps/site/pages/`. Component partials (header, footer HTML) live in `apps/site/components/` but are currently superseded by the TypeScript `renderHeader()`/`renderFooter()` functions in `site.ts`.
 
-Frontend uses **HTMX** (no React/Vue). Styling uses **Tailwind CSS from CDN** with a Material Design 3 color palette extended in the inline `tailwind.config`. Fonts: **Noto Sans Mono** for everything — `shared-head.html` defines one `MONO_STACK` and maps all four Tailwind families (`headline`, `body`, `label`, `mono`) to it, so the whole site is monospace.
+Frontend uses **HTMX** (no React/Vue). Styling uses **Tailwind CSS from CDN** with a Material Design 3 color palette extended in the inline `tailwind.config`. Fonts: **OpenTUI Mono** (self-hosted woff2 in `apps/site/public/fonts/`, declared via `@font-face` in `shared-head.html`) for everything, with **Noto Sans Mono** (Google Fonts) next in the stack because OpenTUI Mono has no Cyrillic glyphs — `shared-head.html` defines one `MONO_STACK` and maps all four Tailwind families (`headline`, `body`, `label`, `mono`) to it, so the whole site is monospace.
 
 ### Interaction conventions
 
