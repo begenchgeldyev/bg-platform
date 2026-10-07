@@ -101,7 +101,8 @@ by an OpenAI model through the AI SDK and grounded only in the CV. Follow-up
 ### Browser client: `apps/site/client/ask-chat.ts`
 
 - `TerminalChatState` implements AI SDK's `ChatState` (messages array, status,
-  error, `snapshot = structuredClone`) and notifies a listener on every change.
+  error, `snapshot = structuredClone`) and notifies a listener on every message change, which streams the answer
+  text.
 - `TerminalChat extends AbstractChat` with `DefaultChatTransport({ api:
   '/api/ask', prepareSendMessagesRequest })` that sends only the last 20
   messages.

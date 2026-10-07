@@ -1,3 +1,4 @@
+		<script type="module" src="/assets/ask-chat.js"></script>
 		<script>
 		(() => {
 			const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -56,6 +57,7 @@
 						`<div class="pl-2 space-y-1" style="white-space:pre;">` +
 						row("help", "show this message") +
 						row("whoami", "about me") +
+						row("ask [question]", "ask an AI about my experience") +
 						row("ls", "list files") +
 						row("cat [file]", "read a file") +
 						row("uptime", "system uptime") +
@@ -74,6 +76,41 @@
       <div><span class="text-secondary font-bold">ENV:&nbsp;&nbsp;&nbsp;</span> Neovim + Tmux + Linux</div>
       <div><span class="text-secondary font-bold">STATUS:</span> Building high-fidelity interfaces &amp; backend systems.</div>
     </div>`;
+				},
+
+				ask(args) {
+					const question = args.join(" ");
+					if (!question) return err("ask: usage — ask [question], e.g. ask what did you build at Synecta?");
+					const assistant = window.askChat;
+					if (!assistant) return err("ask: assistant is unavailable");
+					if (assistant.busy()) return err("ask: still answering…");
+
+					const line = document.createElement("div");
+					line.className = "pb-1 pl-2 text-on-surface-variant/90";
+					line.innerHTML =
+						'<span class="text-secondary font-bold">assistant:</span> <span class="whitespace-pre-wrap" data-answer></span><span class="blinking-cursor"></span>';
+					body.insertBefore(line, inputLine);
+					body.scrollTop = body.scrollHeight;
+					const answer = line.querySelector("[data-answer]");
+					const cursor = line.querySelector(".blinking-cursor");
+
+					assistant.ask(question, {
+						onText(text) {
+							answer.textContent = text;
+							body.scrollTop = body.scrollHeight;
+						},
+						onDone() {
+							cursor.remove();
+						},
+						onError(message) {
+							const error = document.createElement("span");
+							error.className = "text-error/80";
+							error.textContent = `ask: ${message}`;
+							line.replaceChildren(error);
+							body.scrollTop = body.scrollHeight;
+						},
+					});
+					return null;
 				},
 
 				ls() {

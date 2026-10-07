@@ -10,7 +10,9 @@
     "format": "biome check --write ."
   },
   "dependencies": {
+    "@ai-sdk/openai": "^4.0.84",
     "@bg/core": "workspace:*",
+    "ai": "^7.0.128",
     "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.7"
   },

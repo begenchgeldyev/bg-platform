@@ -1,14 +1,23 @@
 import { canAccess, enforce, resolveEmail } from '@bg/core/abac/pep';
+import type { Server } from 'bun';
 import { container } from './app-container';
+import { AskController } from './ask/ask.controller';
+import { buildClientBundle, serveClientBundle } from './client-bundle';
 import { resolveLang } from './i18n';
 import { handleLangRequest } from './lang-route';
 import { ProjectController } from './project/project.controller';
 import { renderPage, servePublicAsset } from './site';
 
 const PORT = Number(process.env.PORT) || 8613;
+const askChatBundle = await buildClientBundle();
 
 function withPrefix<T>(prefix: string, routes: Record<string, T>): Record<string, T> {
   return Object.fromEntries(Object.entries(routes).map(([path, handler]) => [`${prefix}${path}`, handler]));
+}
+
+function clientIp(req: Request, server: Server<undefined>): string {
+  const forwarded = req.headers.get('x-forwarded-for')?.split(',').at(-1)?.trim();
+  return forwarded || server.requestIP(req)?.address || 'unknown';
 }
 
 Bun.serve({
@@ -46,6 +55,9 @@ Bun.serve({
       '/lang': {
         POST: (req: Request) => handleLangRequest(req),
       },
+      '/ask': {
+        POST: (req: Request, server: Server<undefined>) => container.resolve(AskController).handle(req, clientIp(req, server)),
+      },
       '/auth/logout': {
         POST: () => {
           const cookie = `dev-user-email=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
@@ -53,7 +65,9 @@ Bun.serve({
         },
       },
     }),
-    {},
+    {
+      '/assets/ask-chat.js': (req: Request) => serveClientBundle(req, askChatBundle),
+    },
   ),
 
   async fetch(req) {
