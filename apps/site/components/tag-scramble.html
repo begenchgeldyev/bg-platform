@@ -1,23 +1,32 @@
 <script>
   (() => {
     const chars = '!<>-_\\/[]{}—=+*^?#________';
+    // Duration of one scramble step; raise to slow the effect down.
+    const FRAME_MS = 45;
     const tags = document.querySelectorAll('a[class*="border-outline"], button[class*="border-outline"]');
     tags.forEach((el) => {
       const original = el.textContent;
-      let frame = 0;
       let raf = 0;
       let queue = [];
 
       const scramble = () => {
         cancelAnimationFrame(raf);
-        frame = 0;
         queue = [];
         for (let i = 0; i < original.length; i++) {
           const start = Math.floor(Math.random() * 8);
           const end = start + Math.floor(Math.random() * 8) + 4;
           queue.push({ from: original[i], to: original[i], start, end });
         }
-        const tick = () => {
+        const startedAt = performance.now();
+        let lastFrame = -1;
+        const tick = (now = startedAt) => {
+          // rAF timestamps can predate startedAt, so clamp to the first step.
+          const frame = Math.max(0, Math.floor((now - startedAt) / FRAME_MS));
+          if (frame === lastFrame) {
+            raf = requestAnimationFrame(tick);
+            return;
+          }
+          lastFrame = frame;
           let output = '';
           let complete = 0;
           for (let i = 0; i < queue.length; i++) {
@@ -34,7 +43,6 @@
           el.textContent = output;
           if (complete < queue.length) {
             raf = requestAnimationFrame(tick);
-            frame++;
           } else {
             el.textContent = original;
           }
