@@ -9,6 +9,8 @@ import { ProjectController } from './project/project.controller';
 import { renderPage, servePublicAsset } from './site';
 
 const PORT = Number(process.env.PORT) || 8613;
+// A model can stay silent for longer than Bun's default 10 s idle timeout before its first token.
+const ASK_IDLE_TIMEOUT_SECONDS = 60;
 const askChatBundle = await buildClientBundle();
 
 function withPrefix<T>(prefix: string, routes: Record<string, T>): Record<string, T> {
@@ -56,7 +58,10 @@ Bun.serve({
         POST: (req: Request) => handleLangRequest(req),
       },
       '/ask': {
-        POST: (req: Request, server: Server<undefined>) => container.resolve(AskController).handle(req, clientIp(req, server)),
+        POST: (req: Request, server: Server<undefined>) => {
+          server.timeout(req, ASK_IDLE_TIMEOUT_SECONDS);
+          return container.resolve(AskController).handle(req, clientIp(req, server));
+        },
       },
       '/auth/logout': {
         POST: () => {
