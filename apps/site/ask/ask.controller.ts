@@ -31,6 +31,16 @@ function messageText(message: UIMessage) {
   return message.parts.map((part) => (part.type === 'text' ? part.text : '')).join('');
 }
 
+// Clients echo earlier answers back with provider metadata (OpenAI item ids). Forwarding it makes the provider
+// reference stored items instead of resending the text, which fails when the endpoint does not store responses.
+function toPlainTextMessages(messages: UIMessage[]): UIMessage[] {
+  return messages.map(({ id, role, parts }) => ({
+    id,
+    role,
+    parts: parts.flatMap((part) => (part.type === 'text' ? [{ type: 'text' as const, text: part.text }] : [])),
+  }));
+}
+
 function findLimitViolation(messages: UIMessage[]): string | null {
   if (messages.length > ASK_LIMITS.maxMessages) {
     return `send at most ${ASK_LIMITS.maxMessages} messages`;
@@ -92,7 +102,7 @@ export class AskController {
     const result = streamText({
       model,
       instructions: buildInstructions(await loadCvText()),
-      messages: await convertToModelMessages(messages),
+      messages: await convertToModelMessages(toPlainTextMessages(messages)),
       maxOutputTokens: ASK_LIMITS.maxOutputTokens,
       abortSignal: req.signal,
       onError: ({ error }) => console.error('ask: generation failed', error),

@@ -81,6 +81,22 @@ describe('AskController', () => {
     expect(prompt[0].content).toContain('Fullstack Developer at Synecta, Tomsk.');
   });
 
+  test('resends earlier answers as plain text instead of client-supplied provider references', async () => {
+    const model = mockModel();
+    const history: UIMessage[] = [
+      message('user', 'Where does Begench work?'),
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [{ type: 'step-start' }, { type: 'text', text: 'At Synecta.', providerMetadata: { openai: { itemId: 'msg_123' } } }],
+      },
+      message('user', 'Since when?'),
+    ];
+    const res = await controller({ model }).handle(post({ messages: history }), '1.1.1.1');
+    await res.text();
+    expect(model.doStreamCalls[0].prompt[2]).toEqual({ role: 'assistant', content: [{ type: 'text', text: 'At Synecta.' }] });
+  });
+
   test('rejects malformed requests with a reason', async () => {
     const tooMany = Array.from({ length: 21 }, (_, i) => message(i % 2 ? 'assistant' : 'user', 'hi'));
     const cases: unknown[] = [
