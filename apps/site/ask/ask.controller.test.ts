@@ -113,6 +113,30 @@ describe('AskController', () => {
     }
   });
 
+  test('refuses cross-site and non-JSON requests without charging the rate limit', async () => {
+    const guarded = controller({ limit: 1 });
+    const body = JSON.stringify({ messages: [message('user', 'hi')] });
+    const plainText = await guarded.handle(
+      new Request('http://localhost/api/ask', { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, body }),
+      '1.1.1.1',
+    );
+    expect(plainText.status).toBe(415);
+    expect(await plainText.json()).toEqual({ error: 'requests must be JSON' });
+    const crossSite = await guarded.handle(
+      new Request('http://localhost/api/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Sec-Fetch-Site': 'cross-site' },
+        body,
+      }),
+      '1.1.1.1',
+    );
+    expect(crossSite.status).toBe(403);
+    expect(await crossSite.json()).toEqual({ error: 'cross-site requests are not allowed' });
+    const allowed = await guarded.handle(post({ messages: [message('user', 'hi')] }), '1.1.1.1');
+    expect(allowed.status).toBe(200);
+    await allowed.text();
+  });
+
   test('rejects a body over the size limit even when every message is valid', async () => {
     const history = [message('user', 'hi'), message('assistant', 'x'.repeat(40_000)), message('user', 'and then?')];
     const res = await controller().handle(post({ messages: history }), '1.1.1.1');

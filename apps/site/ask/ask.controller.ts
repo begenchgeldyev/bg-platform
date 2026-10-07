@@ -93,6 +93,15 @@ export class AskController {
       return errorResponse(503, 'assistant is offline');
     }
 
+    // A page on another site can still fire "simple" text/plain POSTs at this endpoint from every visitor's browser.
+    // Requiring JSON forces a CORS preflight, which this server never answers, so those requests cannot spend model calls.
+    if (req.headers.get('sec-fetch-site') === 'cross-site') {
+      return errorResponse(403, 'cross-site requests are not allowed');
+    }
+    if (!req.headers.get('content-type')?.toLowerCase().startsWith('application/json')) {
+      return errorResponse(415, 'requests must be JSON');
+    }
+
     const slot = rateLimiter.take(clientIp);
     if (!slot.ok) {
       return errorResponse(429, 'rate limit reached, try again in a few minutes', {
