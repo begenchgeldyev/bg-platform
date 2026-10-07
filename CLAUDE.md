@@ -69,6 +69,10 @@ Use `onMouseDown` instead of `onClick` for interactive controls so UI actions fe
 
 The site runs **htmx 4**, so write htmx 4 syntax: colon-separated events (`htmx:config:request`, with request headers at `event.detail.ctx.request.headers`) and explicit attribute inheritance (`hx-target:inherited="…"`). Global htmx config lives in the `<meta name="htmx-config">` in `shared-head.html`; its `noSwap` keeps 4xx/5xx response bodies out of the page, as htmx 2 did.
 
+### AI assistant
+
+The home-page terminal's `ask <question>` command chats with an OpenAI model through AI SDK 7 (`ai`, `@ai-sdk/openai`). `apps/site/ask/` is the server side: `AskController` (registered in `app-container.ts`, routed at `POST /api/ask`) grounds every answer in the CV text from `pages/cv.html`, validates the AI SDK UI messages, resends history as plain text, and rate-limits per client IP. `apps/site/client/` is the browser side (AI SDK `AbstractChat`); `server.ts` bundles it with `Bun.build` at startup and serves it from memory at `/assets/ask-chat.js`. Config: `OPENAI_API_KEY` (the feature is off without it), `OPENAI_MODEL` (default `gpt-5.4-mini`), optional `OPENAI_BASE_URL`.
+
 ### Dependency injection
 
 `packages/core/DIContainer.ts` is a hand-rolled singleton DI container. Classes decorated with `@Injectable()` or registered via `container.registerFactory()` are resolved lazily and cached as singletons.
