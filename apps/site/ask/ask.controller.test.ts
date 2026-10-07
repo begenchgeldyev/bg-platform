@@ -142,6 +142,17 @@ describe('AskController', () => {
     await allowed.text();
   });
 
+  test('rejects a declared Content-Length over the limit', async () => {
+    const req = new Request('http://localhost/api/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': String(64 * 1024) },
+      body: '{}',
+    });
+    const res = await controller().handle(req, '1.1.1.1');
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'request is too large' });
+  });
+
   test('rejects a body over the size limit even when every message is valid', async () => {
     const history = [message('user', 'hi'), message('assistant', 'x'.repeat(40_000)), message('user', 'and then?')];
     const res = await controller().handle(post({ messages: history }), '1.1.1.1');
