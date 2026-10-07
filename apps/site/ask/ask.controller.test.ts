@@ -105,13 +105,39 @@ describe('AskController', () => {
       { messages: [message('user', 'x'.repeat(501))] },
       { messages: [{ id: 'f', role: 'user', parts: [{ type: 'file', mediaType: 'image/png', url: 'data:image/png;base64,AA==' }] }] },
       { messages: [message('user', 'hi'), message('assistant', 'hello')] },
-      { messages: [message('user', 'x'.repeat(40_000))] },
     ];
     for (const body of cases) {
       const res = await controller().handle(post(body), '1.1.1.1');
       expect(res.status).toBe(400);
       expect(typeof ((await res.json()) as { error?: unknown }).error).toBe('string');
     }
+  });
+
+  test('rejects a body over the size limit even when every message is valid', async () => {
+    const history = [message('user', 'hi'), message('assistant', 'x'.repeat(40_000)), message('user', 'and then?')];
+    const res = await controller().handle(post({ messages: history }), '1.1.1.1');
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'request is too large' });
+  });
+
+  test('stops reading a body without Content-Length once it passes the size limit', async () => {
+    const chunk = new Uint8Array(16 * 1024).fill(120);
+    let sent = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(stream) {
+        if (sent >= 1024 * 1024) {
+          stream.close();
+          return;
+        }
+        sent += chunk.byteLength;
+        stream.enqueue(chunk);
+      },
+    });
+    const req = new Request('http://localhost/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+    const res = await controller().handle(req, '1.1.1.1');
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'request is too large' });
+    expect(sent).toBeLessThan(128 * 1024);
   });
 
   test('rate limits per client IP', async () => {

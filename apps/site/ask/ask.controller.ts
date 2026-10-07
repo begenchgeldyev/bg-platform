@@ -27,6 +27,28 @@ function errorResponse(status: number, error: string, headers?: Record<string, s
   return Response.json({ error }, { status, headers });
 }
 
+async function readBodyWithin(req: Request, maxBytes: number): Promise<string | null> {
+  if (!req.body) {
+    return '';
+  }
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    size += value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  return new TextDecoder().decode(Bun.concatArrayBuffers(chunks));
+}
+
 function messageText(message: UIMessage) {
   return message.parts.map((part) => (part.type === 'text' ? part.text : '')).join('');
 }
@@ -81,8 +103,8 @@ export class AskController {
     if (Number(req.headers.get('content-length') ?? 0) > ASK_LIMITS.maxBodyBytes) {
       return errorResponse(400, 'request is too large');
     }
-    const raw = await req.text();
-    if (new TextEncoder().encode(raw).byteLength > ASK_LIMITS.maxBodyBytes) {
+    const raw = await readBodyWithin(req, ASK_LIMITS.maxBodyBytes);
+    if (raw === null) {
       return errorResponse(400, 'request is too large');
     }
 
