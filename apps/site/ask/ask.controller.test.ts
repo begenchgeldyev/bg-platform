@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { simulateReadableStream, type UIMessage } from 'ai';
 import { MockLanguageModelV4 } from 'ai/test';
+import { createRateLimiter } from '../http/rate-limit';
 import { AskController } from './ask.controller';
-import { createRateLimiter } from './rate-limit';
 
 const ANSWER = ['Begench ', 'builds ', 'web apps.'];
 

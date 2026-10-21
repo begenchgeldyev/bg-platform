@@ -2,7 +2,7 @@ import { openai } from '@ai-sdk/openai';
 import { Container, db, ProjectsRepository } from '@bg/core';
 import { AskController } from './ask/ask.controller';
 import { loadCvText } from './ask/cv-knowledge';
-import { createRateLimiter } from './ask/rate-limit';
+import { createRateLimiter } from './http/rate-limit';
 import { ProjectController } from './project/project.controller';
 
 export const container = new Container();

@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV4 } from 'ai/test';
 import { AskController } from '../ask/ask.controller';
-import { createRateLimiter } from '../ask/rate-limit';
+import { createRateLimiter } from '../http/rate-limit';
 import { type AskChat, createAskChat } from './ask-chat';
 
 const model = new MockLanguageModelV4({

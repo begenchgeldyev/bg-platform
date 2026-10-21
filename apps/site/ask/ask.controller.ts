@@ -7,8 +7,9 @@ import {
   type UIMessage,
   validateUIMessages,
 } from 'ai';
+import type { RateLimiter } from '../http/rate-limit';
+import { errorResponse, readBodyWithin, refuseCrossSite, refuseNonJson } from '../http/requests';
 import { buildInstructions } from './instructions';
-import type { RateLimiter } from './rate-limit';
 
 export const ASK_LIMITS = {
   maxBodyBytes: 32 * 1024,
@@ -22,32 +23,6 @@ type AskControllerDeps = {
   rateLimiter: RateLimiter;
   loadCvText: () => Promise<string>;
 };
-
-function errorResponse(status: number, error: string, headers?: Record<string, string>) {
-  return Response.json({ error }, { status, headers });
-}
-
-async function readBodyWithin(req: Request, maxBytes: number): Promise<string | null> {
-  if (!req.body) {
-    return '';
-  }
-  const reader = req.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
-    size += value.byteLength;
-    if (size > maxBytes) {
-      await reader.cancel();
-      return null;
-    }
-    chunks.push(value);
-  }
-  return new TextDecoder().decode(Bun.concatArrayBuffers(chunks));
-}
 
 function messageText(message: UIMessage) {
   return message.parts.map((part) => (part.type === 'text' ? part.text : '')).join('');
@@ -94,13 +69,13 @@ export class AskController {
       return errorResponse(503, 'assistant is offline');
     }
 
-    // A page on another site can still fire "simple" text/plain POSTs at this endpoint from every visitor's browser.
-    // Requiring JSON forces a CORS preflight, which this server never answers, so those requests cannot spend model calls.
-    if (req.headers.get('sec-fetch-site') === 'cross-site') {
-      return errorResponse(403, 'cross-site requests are not allowed');
+    const crossSite = refuseCrossSite(req);
+    if (crossSite) {
+      return crossSite;
     }
-    if (!req.headers.get('content-type')?.toLowerCase().startsWith('application/json')) {
-      return errorResponse(415, 'requests must be JSON');
+    const nonJson = refuseNonJson(req);
+    if (nonJson) {
+      return nonJson;
     }
 
     const slot = rateLimiter.take(clientIp);
