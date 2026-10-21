@@ -234,22 +234,28 @@ export class ProjectController {
     return Response.json({ projects: items });
   }
 
-  async post(req: Request) {
+  // Writes share one guard order: cross-site, then edit rights, then JSON-only, then a
+  // size-limited JSON read. Callers only have to deal with the parsed body or an early response.
+  private async readAuthorizedJson(req: Request): Promise<{ ok: true; value: unknown } | { ok: false; response: Response }> {
     const crossSite = refuseCrossSite(req);
     if (crossSite) {
-      return crossSite;
+      return { ok: false, response: crossSite };
     }
 
     if (!(await this.canEditProjects(req))) {
-      return errorResponse(403, 'not allowed');
+      return { ok: false, response: errorResponse(403, 'not allowed') };
     }
 
     const nonJson = refuseNonJson(req);
     if (nonJson) {
-      return nonJson;
+      return { ok: false, response: nonJson };
     }
 
-    const body = await readJsonWithin(req, PROJECT_LIMITS.maxBodyBytes);
+    return readJsonWithin(req, PROJECT_LIMITS.maxBodyBytes);
+  }
+
+  async post(req: Request) {
+    const body = await this.readAuthorizedJson(req);
     if (!body.ok) {
       return body.response;
     }
@@ -264,21 +270,7 @@ export class ProjectController {
   }
 
   async patch(req: Request, id: number) {
-    const crossSite = refuseCrossSite(req);
-    if (crossSite) {
-      return crossSite;
-    }
-
-    if (!(await this.canEditProjects(req))) {
-      return errorResponse(403, 'not allowed');
-    }
-
-    const nonJson = refuseNonJson(req);
-    if (nonJson) {
-      return nonJson;
-    }
-
-    const body = await readJsonWithin(req, PROJECT_LIMITS.maxBodyBytes);
+    const body = await this.readAuthorizedJson(req);
     if (!body.ok) {
       return body.response;
     }
