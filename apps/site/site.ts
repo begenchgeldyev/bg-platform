@@ -15,14 +15,6 @@ type PageConfig = {
   showTerminalIcon?: boolean;
 };
 
-function serializeForInlineScript(value: unknown) {
-  return JSON.stringify(value).replaceAll('<', '\\u003c');
-}
-
-function escapeHtml(value: string) {
-  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
-}
-
 const APP_DIR = import.meta.dir;
 const PAGES_DIR = join(APP_DIR, 'pages');
 const COMPONENTS_DIR = join(APP_DIR, 'components');
@@ -98,9 +90,8 @@ export async function renderComponentTemplate(componentPath: string, values: Rec
   return fillTemplate(template, values);
 }
 
-async function renderSharedHead(userEmail?: string | null) {
-  const serializedEmail = serializeForInlineScript(userEmail ?? null);
-  return renderComponentTemplate('shared-head.html', { serializedEmailAttr: escapeHtml(serializedEmail) });
+async function renderSharedHead() {
+  return renderComponentTemplate('shared-head.html');
 }
 
 function renderNavLink(activeNav: NavKey | undefined, href: string, label: string, key: NavKey) {
@@ -174,7 +165,7 @@ async function renderFooter(config: PageConfig, lang: Lang) {
   return renderComponentTemplate('footer-default.html', { cvLink });
 }
 
-async function renderLayout(config: PageConfig, content: string, lang: Lang, userEmail?: string | null) {
+async function renderLayout(config: PageConfig, content: string, lang: Lang) {
   const selectionTextClass = config.selectionTextClass ?? 'selection:text-on-primary-container';
   return renderComponentTemplate('document.html', {
     content,
@@ -182,13 +173,13 @@ async function renderLayout(config: PageConfig, content: string, lang: Lang, use
     header: await renderHeader(config, lang),
     lang,
     selectionTextClass,
-    sharedHead: await renderSharedHead(userEmail),
+    sharedHead: await renderSharedHead(),
     title: config.title[lang],
   });
 }
 
-export async function renderDocument(config: PageConfig, content: string, lang: Lang, userEmail?: string | null) {
-  return renderLayout(config, content, lang, userEmail);
+export async function renderDocument(config: PageConfig, content: string, lang: Lang) {
+  return renderLayout(config, content, lang);
 }
 
 async function resolveIncludes(html: string): Promise<string> {
@@ -203,7 +194,7 @@ async function resolveIncludes(html: string): Promise<string> {
   return html;
 }
 
-export async function renderPage(pathname: string, lang: Lang, userEmail?: string | null): Promise<Response | null> {
+export async function renderPage(pathname: string, lang: Lang): Promise<Response | null> {
   const config = PAGE_CONFIGS[pathname];
   if (!config) {
     return null;
@@ -218,7 +209,7 @@ export async function renderPage(pathname: string, lang: Lang, userEmail?: strin
   }
 
   const content = await resolveIncludes(await fragment.text());
-  return new Response(await renderLayout(config, content, lang, userEmail), {
+  return new Response(await renderLayout(config, content, lang), {
     headers: { 'Content-Type': 'text/html; charset=utf-8' },
   });
 }

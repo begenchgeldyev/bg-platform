@@ -102,6 +102,17 @@ describe('home page', () => {
   });
 });
 
+describe('client-side identity', () => {
+  test.each(['/', '/projects', '/cv'])('no page ships client-side identity hooks (%s)', async (pathname) => {
+    const res = await renderPage(pathname, 'en');
+    expect(res).not.toBeNull();
+    const html = await (res as Response).text();
+    expect(html).not.toContain('x-user-email');
+    expect(html).not.toContain('__DEV_USER_EMAIL__');
+    expect(html).not.toContain('dev-user-email');
+  });
+});
+
 describe('htmx setup', () => {
   test('configures htmx 4 before it loads so 4xx/5xx responses are not swapped, as in htmx 2', async () => {
     const res = await renderPage('/projects', 'en');

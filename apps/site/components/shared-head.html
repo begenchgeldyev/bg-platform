@@ -11,30 +11,6 @@
   href="https://fonts.googleapis.com/css2?family=Noto+Sans+Mono:wght@100..900&display=swap"
   rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
-<script data-dev-user-email="{{serializedEmailAttr}}">
-const devUserEmail = JSON.parse(document.currentScript.dataset.devUserEmail);
-window.__DEV_USER_EMAIL__ = devUserEmail;
-
-if (window.__DEV_USER_EMAIL__) {
-  document.cookie = `dev-user-email=${encodeURIComponent(window.__DEV_USER_EMAIL__)}; path=/; SameSite=Lax`;
-}
-
-document.addEventListener('htmx:config:request', (event) => {
-  if (window.__DEV_USER_EMAIL__) {
-    event.detail.ctx.request.headers['x-user-email'] = window.__DEV_USER_EMAIL__;
-  }
-});
-
-const nativeFetch = window.fetch.bind(window);
-window.fetch = (input, init) => {
-  const request = new Request(input, init || {});
-  const headers = new Headers(request.headers);
-  if (window.__DEV_USER_EMAIL__) {
-    headers.set('x-user-email', window.__DEV_USER_EMAIL__);
-  }
-  return nativeFetch(new Request(request, { headers }));
-};
-</script>
 <script id="tailwind-config">
 const MONO_STACK = [
   '"OpenTUI Mono"',

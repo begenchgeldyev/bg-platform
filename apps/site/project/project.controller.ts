@@ -1,4 +1,4 @@
-import { canAccess, Injectable, type ProjectsRepository, resolveEmail } from '@bg/core';
+import { canAccess, Injectable, type ProjectsRepository } from '@bg/core';
 import { type Lang, resolveLang, t } from '../i18n';
 import { renderComponentTemplate, renderDocument } from '../site';
 import { cardColSpans } from './card-layout';
@@ -211,7 +211,6 @@ async function renderProjectPage(req: Request, project: ProjectRecord, canEdit: 
       },
       contentHtml,
       lang,
-      resolveEmail(req),
     ),
     {
       headers: { 'Content-Type': 'text/html; charset=utf-8' },
