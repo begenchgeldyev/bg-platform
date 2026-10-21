@@ -122,12 +122,16 @@ describe('photo paths', () => {
     expect(parseProjectChanges({ image: '/public/%2E%2E/server.ts' })).toEqual({ ok: false, error: 'photo must be an uploaded image' });
   });
 
-  test('refuses a traversal that is encoded twice', () => {
-    expect(parseProjectChanges({ image: '/public/%252e%252e/server.ts' })).toEqual({ ok: false, error: 'photo must be an uploaded image' });
+  test('refuses a traversal that escapes once the browser resolves the URL', () => {
+    for (const image of ['/public/%2e%2e?x', '/public/..\t/server.ts', '/public/..?x', '/public/../server.ts', '/public/.%2e/server.ts']) {
+      expect(parseProjectChanges({ image })).toEqual({ ok: false, error: 'photo must be an uploaded image' });
+    }
   });
 
-  test('refuses an encoded traversal with an encoded slash', () => {
-    expect(parseProjectChanges({ image: '/public/..%2Fserver.ts' })).toEqual({ ok: false, error: 'photo must be an uploaded image' });
+  test('keeps valid public filenames, including a literal percent', () => {
+    for (const image of ['/public/a%25.png', '/public/projects/telegram-bot.jpg']) {
+      expect(parseProjectChanges({ image })).toEqual({ ok: true, value: { image } });
+    }
   });
 
   test('refuses a payload that is not real base64', () => {

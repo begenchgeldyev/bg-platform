@@ -40,25 +40,13 @@ function parseText(value: unknown, field: 'description' | 'content', maxChars: n
   return { ok: true, value };
 }
 
-// Decode until the path stops changing, so once- and twice-encoded dot segments both surface.
-function decodePath(image: string): string | null {
-  let path = image;
-  for (;;) {
-    let decoded: string;
-    try {
-      decoded = decodeURIComponent(path);
-    } catch {
-      return null;
-    }
-    if (decoded === path) return path;
-    path = decoded;
-  }
-}
+// A public photo path must look like a plain filename path and still resolve under /public/ once the browser
+// applies URL normalization, which is what decides where the <img src> request actually goes.
+const PUBLIC_IMAGE = /^\/public\/[A-Za-z0-9._~%/-]+$/;
 
 function isPublicImagePath(image: string): boolean {
-  const path = decodePath(image);
-  if (path === null) return false;
-  return path.startsWith('/public/') && !path.includes('\\') && !path.split('/').includes('..');
+  if (!PUBLIC_IMAGE.test(image)) return false;
+  return new URL(image, 'http://localhost').pathname.startsWith('/public/');
 }
 
 function parseImage(value: unknown): ParseResult<string | null> {
