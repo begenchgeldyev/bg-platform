@@ -45,6 +45,16 @@
     console.error('Failed to parse admin icons JSON', err);
   }
 
+  const limitsDataEl = document.getElementById('admin-limits-data');
+  let limits = {};
+  try {
+    limits = limitsDataEl ? JSON.parse(limitsDataEl.textContent || '{}') : {};
+  } catch (err) {
+    console.error('Failed to parse admin limits JSON', err);
+  }
+  const maxImageBytes = Number(limits.maxImageBytes) || 0;
+  const maxImageMb = Math.round(maxImageBytes / (1024 * 1024));
+
   let currentProjectId = null;
   let currentIcon = null;
   let currentImage = '';
@@ -334,9 +344,8 @@
       const file = e.target.files?.[0];
       if (!file) return;
 
-      const maxBytes = 2 * 1024 * 1024;
-      if (file.size > maxBytes) {
-        showStatus(`File exceeds 2 MB limit (${(file.size / (1024 * 1024)).toFixed(2)} MB). Refused before reading.`, true);
+      if (maxImageBytes > 0 && file.size > maxImageBytes) {
+        showStatus(`File exceeds ${maxImageMb} MB limit (${(file.size / (1024 * 1024)).toFixed(2)} MB). Refused before reading.`, true);
         photoInput.value = '';
         return;
       }

@@ -98,7 +98,7 @@
                 name="name"
                 type="text"
                 required
-                maxlength="120"
+                maxlength="{{ maxNameChars }}"
                 placeholder="e.g. Memory Interpreter"
                 class="w-full bg-[#050505] border border-outline-variant/50 focus:border-primary-container focus:ring-1 focus:ring-primary-container font-mono text-sm text-on-surface px-4 py-2.5 outline-none transition-all">
             </div>
@@ -124,13 +124,13 @@
               <label for="admin-form-description" class="block font-mono text-[11px] uppercase tracking-[0.18em] text-primary-container">
                 Description (Card Summary)
               </label>
-              <span class="font-mono text-[10px] text-outline-variant">Max 600 chars</span>
+              <span class="font-mono text-[10px] text-outline-variant">Max {{ maxDescriptionChars }} chars</span>
             </div>
             <textarea
               id="admin-form-description"
               name="description"
               rows="3"
-              maxlength="600"
+              maxlength="{{ maxDescriptionChars }}"
               placeholder="Short summary displayed on project cards and page hero..."
               class="w-full bg-[#050505] border border-outline-variant/50 focus:border-primary-container focus:ring-1 focus:ring-primary-container font-mono text-sm text-on-surface p-3 outline-none transition-all leading-relaxed"></textarea>
           </div>
@@ -168,7 +168,7 @@
           <div class="space-y-2">
             <div class="flex items-center justify-between">
               <label class="block font-mono text-[11px] uppercase tracking-[0.18em] text-primary-container">Project Image / Cover</label>
-              <span class="font-mono text-[10px] text-outline-variant">Max 2 MB (PNG, JPG, WEBP, GIF)</span>
+              <span class="font-mono text-[10px] text-outline-variant">Max {{ maxImageMb }} MB (PNG, JPG, WEBP, GIF)</span>
             </div>
 
             <input id="admin-photo-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="hidden">
@@ -183,7 +183,7 @@
                 <div
                   id="admin-photo-placeholder"
                   class="py-8 px-4 text-center border border-dashed border-outline-variant/30 text-on-surface-variant font-mono text-xs">
-                  No image attached. Upload a project cover image (max 2 MB).
+                  No image attached. Upload a project cover image (max {{ maxImageMb }} MB).
                 </div>
               </div>
 
@@ -259,4 +259,5 @@
 
 <script id="admin-projects-data" type="text/plain">{{ projectsJson }}</script>
 <script id="admin-icons-data" type="text/plain">{{ iconsJson }}</script>
+<script id="admin-limits-data" type="text/plain">{{ limitsJson }}</script>
 {{ script }}

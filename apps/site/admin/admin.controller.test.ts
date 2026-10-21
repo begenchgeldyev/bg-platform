@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { ProjectsRepository } from '@bg/core';
+import { PROJECT_LIMITS } from '../project/project-input';
 import { AdminController } from './admin.controller';
 
 type Project = Awaited<ReturnType<ProjectsRepository['list']>>[number];
@@ -159,5 +160,30 @@ describe('AdminController', () => {
     expect(html).not.toContain('<html class="dark" lang="ru">');
     expect(html).toContain('>Projects<');
     expect(html).not.toContain('>ПРОЕКТЫ<');
+  });
+
+  test('the editor takes its input limits from PROJECT_LIMITS', async () => {
+    const controller = createController({
+      projects: [project({ name: 'Demo' })],
+      email: 'begenchgeldyev@gmail.com',
+      canEdit: true,
+    });
+    const html = await (await controller.page(new Request('http://localhost/admin'))).text();
+
+    const limitsJson = /<script id="admin-limits-data" type="text\/plain">(.*?)<\/script>/.exec(html)?.[1] ?? '';
+    expect(limitsJson).not.toBe('');
+    expect(JSON.parse(limitsJson)).toEqual({
+      maxNameChars: PROJECT_LIMITS.maxNameChars,
+      maxDescriptionChars: PROJECT_LIMITS.maxDescriptionChars,
+      maxImageBytes: PROJECT_LIMITS.maxImageBytes,
+    });
+
+    const maxImageMb = Math.round(PROJECT_LIMITS.maxImageBytes / (1024 * 1024));
+    expect(html).toContain(`id="admin-form-name"`);
+    expect(html).toContain(`maxlength="${PROJECT_LIMITS.maxNameChars}"`);
+    expect(html).toContain(`maxlength="${PROJECT_LIMITS.maxDescriptionChars}"`);
+    expect(html).toContain(`Max ${PROJECT_LIMITS.maxDescriptionChars} chars`);
+    expect(html).toContain(`Max ${maxImageMb} MB (PNG, JPG, WEBP, GIF)`);
+    expect(html).toContain(`Upload a project cover image (max ${maxImageMb} MB).`);
   });
 });

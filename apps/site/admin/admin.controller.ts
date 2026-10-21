@@ -1,6 +1,7 @@
 import { Injectable, type ProjectsRepository } from '@bg/core';
 import type { CanEditProjects } from '../project/project.controller';
 import { PROJECT_ICONS } from '../project/project-icons';
+import { PROJECT_LIMITS } from '../project/project-input';
 import { renderComponentTemplate, renderDocument } from '../site';
 
 export interface AdminControllerDeps {
@@ -134,10 +135,20 @@ export class AdminController {
     const projects = await this.projectsRepository.list({ includeHidden: true });
     const serializedProjects = JSON.stringify(projects).replaceAll('<', '\\u003c');
     const serializedIcons = JSON.stringify(PROJECT_ICONS).replaceAll('<', '\\u003c');
+    const serializedLimits = JSON.stringify({
+      maxNameChars: PROJECT_LIMITS.maxNameChars,
+      maxDescriptionChars: PROJECT_LIMITS.maxDescriptionChars,
+      maxImageBytes: PROJECT_LIMITS.maxImageBytes,
+    }).replaceAll('<', '\\u003c');
+    const maxImageMb = Math.round(PROJECT_LIMITS.maxImageBytes / (1024 * 1024));
     const script = await renderComponentTemplate('admin/script.html');
     const content = await renderComponentTemplate('admin/page.html', {
       projectsJson: serializedProjects,
       iconsJson: serializedIcons,
+      limitsJson: serializedLimits,
+      maxDescriptionChars: String(PROJECT_LIMITS.maxDescriptionChars),
+      maxImageMb: String(maxImageMb),
+      maxNameChars: String(PROJECT_LIMITS.maxNameChars),
       script,
     });
 
