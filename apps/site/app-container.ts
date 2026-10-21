@@ -1,10 +1,10 @@
 import { openai } from '@ai-sdk/openai';
-import { Container, db, ProjectsRepository } from '@bg/core';
+import { Container, canAccess, db, ProjectsRepository, resolveEmail } from '@bg/core';
 import { AskController } from './ask/ask.controller';
 import { loadCvText } from './ask/cv-knowledge';
 import { AuthController } from './auth/auth.controller';
 import { createRateLimiter } from './http/rate-limit';
-import { ProjectController } from './project/project.controller';
+import { type CanEditProjects, ProjectController } from './project/project.controller';
 
 export const container = new Container();
 
@@ -12,8 +12,17 @@ container.registerFactory(ProjectsRepository, () => {
   return new ProjectsRepository(db);
 });
 
+// A visitor's page view must not pay for a policy lookup, and only a signed session can hold edit rights.
+const canEditProjects: CanEditProjects = async (req) => {
+  if (!resolveEmail(req)) {
+    return false;
+  }
+
+  return canAccess(req, { actions: 'update', resource: 'project' });
+};
+
 container.registerFactory(ProjectController, (c) => {
-  return new ProjectController(c.resolve(ProjectsRepository));
+  return new ProjectController(c.resolve(ProjectsRepository), canEditProjects);
 });
 
 container.registerFactory(AskController, () => {

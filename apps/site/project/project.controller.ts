@@ -1,11 +1,14 @@
-import { canAccess, Injectable, type ProjectsRepository } from '@bg/core';
+import { Injectable, type ProjectsRepository } from '@bg/core';
+import { errorResponse, readJsonWithin, refuseCrossSite, refuseNonJson } from '../http/requests';
 import { type Lang, resolveLang, t } from '../i18n';
 import { renderComponentTemplate, renderDocument } from '../site';
 import { cardColSpans } from './card-layout';
-import { guessProjectIcon } from './project-icons';
-import { extractStackTags } from './stack-tags';
+import { projectIcon } from './project-icons';
+import { PROJECT_LIMITS, parseNewProject, parseProjectChanges } from './project-input';
 
 type ProjectRecord = Awaited<ReturnType<ProjectsRepository['list']>>[number];
+
+export type CanEditProjects = (req: Request) => Promise<boolean>;
 
 function escapeHtml(value: string) {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
@@ -83,7 +86,7 @@ async function renderProjectCard(project: ProjectRecord, index: number, total: n
   const description = escapeHtml(project.description?.trim() || t(lang, 'projectNoDescription'));
   const image = project.image?.trim();
   const viewProjectText = escapeHtml(t(lang, 'viewProject'));
-  const tags = extractStackTags(project.content);
+  const tags = project.tags;
   const hiddenBadge = renderHiddenBadge(project.isHidden, lang);
   const isWide = colSpan === 12;
 
@@ -104,7 +107,7 @@ async function renderProjectCard(project: ProjectRecord, index: number, total: n
     colSpanClass,
     description,
     hiddenBadge,
-    icon: escapeHtml(guessProjectIcon(project.name, project.description)),
+    icon: escapeHtml(projectIcon(project)),
     name,
     projectHref: `/projects/${project.id}`,
     tagsHtml: renderPlainTags(tags),
@@ -212,40 +215,15 @@ async function renderProjectPage(req: Request, project: ProjectRecord, canEdit: 
   );
 }
 
-async function parseProjectPayload(req: Request) {
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return { error: Response.json({ error: 'Invalid JSON body' }, { status: 400 }) };
-  }
-
-  if (!body || typeof body !== 'object') {
-    return { error: Response.json({ error: 'Body must be a JSON object' }, { status: 400 }) };
-  }
-
-  const payload = body as Record<string, unknown>;
-  if (typeof payload.name !== 'string' || payload.name.trim().length === 0) {
-    return { error: Response.json({ error: 'name is required' }, { status: 400 }) };
-  }
-
-  return {
-    value: {
-      name: payload.name.trim(),
-      description: typeof payload.description === 'string' ? payload.description : null,
-      content: typeof payload.content === 'string' ? payload.content : null,
-      image: typeof payload.image === 'string' ? payload.image : null,
-      isHidden: typeof payload.isHidden === 'boolean' ? payload.isHidden : false,
-    },
-  };
-}
-
 @Injectable()
 export class ProjectController {
-  constructor(private readonly projectsRepository: ProjectsRepository) {}
+  constructor(
+    private readonly projectsRepository: ProjectsRepository,
+    private readonly canEditProjects: CanEditProjects,
+  ) {}
 
   async get(req: Request) {
-    const items = await this.projectsRepository.list({ includeHidden: true });
+    const items = await this.projectsRepository.list({ includeHidden: await this.canEditProjects(req) });
     if (req.headers.get('HX-Request') === 'true') {
       return new Response(await renderProjectsFragment(items, resolveLang(req)), {
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -256,32 +234,83 @@ export class ProjectController {
   }
 
   async post(req: Request) {
-    const parsed = await parseProjectPayload(req);
-    if ('error' in parsed) {
-      return parsed.error;
+    const crossSite = refuseCrossSite(req);
+    if (crossSite) {
+      return crossSite;
     }
 
-    const created = await this.projectsRepository.create({
-      ...parsed.value,
-      icon: null,
-      tags: [],
-    });
+    if (!(await this.canEditProjects(req))) {
+      return errorResponse(403, 'not allowed');
+    }
 
+    const nonJson = refuseNonJson(req);
+    if (nonJson) {
+      return nonJson;
+    }
+
+    const body = await readJsonWithin(req, PROJECT_LIMITS.maxBodyBytes);
+    if (!body.ok) {
+      return body.response;
+    }
+
+    const parsed = parseNewProject(body.value);
+    if (!parsed.ok) {
+      return errorResponse(400, parsed.error);
+    }
+
+    const created = await this.projectsRepository.create(parsed.value);
     return Response.json({ project: created }, { status: 201 });
   }
 
   async patch(req: Request, id: number) {
-    const parsed = await parseProjectPayload(req);
-    if ('error' in parsed) {
-      return parsed.error;
+    const crossSite = refuseCrossSite(req);
+    if (crossSite) {
+      return crossSite;
+    }
+
+    if (!(await this.canEditProjects(req))) {
+      return errorResponse(403, 'not allowed');
+    }
+
+    const nonJson = refuseNonJson(req);
+    if (nonJson) {
+      return nonJson;
+    }
+
+    const body = await readJsonWithin(req, PROJECT_LIMITS.maxBodyBytes);
+    if (!body.ok) {
+      return body.response;
+    }
+
+    const parsed = parseProjectChanges(body.value);
+    if (!parsed.ok) {
+      return errorResponse(400, parsed.error);
     }
 
     const updated = await this.projectsRepository.updateById(id, parsed.value);
     if (!updated) {
-      return Response.json({ error: 'Project not found' }, { status: 404 });
+      return errorResponse(404, 'project not found');
     }
 
     return Response.json({ project: updated });
+  }
+
+  async delete(req: Request, id: number) {
+    const crossSite = refuseCrossSite(req);
+    if (crossSite) {
+      return crossSite;
+    }
+
+    if (!(await this.canEditProjects(req))) {
+      return errorResponse(403, 'not allowed');
+    }
+
+    const deleted = await this.projectsRepository.deleteById(id);
+    if (!deleted) {
+      return errorResponse(404, 'project not found');
+    }
+
+    return new Response(null, { status: 204 });
   }
 
   async getPageById(req: Request, id: number) {
@@ -290,11 +319,10 @@ export class ProjectController {
       return new Response('Not Found', { status: 404 });
     }
 
-    const allowEdit = await canAccess(req, {
-      actions: 'update',
-      resource: 'project',
-      resourceAttributes: { projectId: project.id },
-    });
+    const allowEdit = await this.canEditProjects(req);
+    if (project.isHidden && !allowEdit) {
+      return new Response('Not Found', { status: 404 });
+    }
 
     return await renderProjectPage(req, project, allowEdit);
   }

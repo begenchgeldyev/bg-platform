@@ -1,4 +1,3 @@
-import { canAccess, enforce } from '@bg/core/abac/pep';
 import type { Server } from 'bun';
 import { container } from './app-container';
 import { AskController } from './ask/ask.controller';
@@ -36,7 +35,7 @@ Bun.serve({
       },
       '/projects': {
         GET: (req) => container.resolve(ProjectController).get(req),
-        POST: enforce((req) => container.resolve(ProjectController).post(req), { actions: 'create', resource: 'project' }),
+        POST: (req) => container.resolve(ProjectController).post(req),
       },
       '/auth/login': {
         POST: (req: Request, server: Server<undefined>) => container.resolve(AuthController).login(req, clientIp(req, server)),
@@ -67,18 +66,15 @@ Bun.serve({
     }
 
     const projectApiMatch = pathname.match(/^\/api\/projects\/(\d+)$/);
-    if (projectApiMatch && req.method === 'PATCH') {
-      const allowed = await canAccess(req, {
-        actions: 'update',
-        resource: 'project',
-        resourceAttributes: { projectId: Number(projectApiMatch[1]) },
-      });
-
-      if (!allowed) {
-        return Response.json({ error: 'Forbidden' }, { status: 403 });
+    if (projectApiMatch) {
+      const projectId = Number(projectApiMatch[1]);
+      if (req.method === 'PATCH') {
+        return container.resolve(ProjectController).patch(req, projectId);
       }
 
-      return container.resolve(ProjectController).patch(req, Number(projectApiMatch[1]));
+      if (req.method === 'DELETE') {
+        return container.resolve(ProjectController).delete(req, projectId);
+      }
     }
 
     const projectDetailMatch = pathname.match(/^\/projects\/(\d+)$/);
