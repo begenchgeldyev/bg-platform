@@ -78,6 +78,10 @@ export class AuthController {
     if (crossSite) {
       return crossSite;
     }
+    const nonJson = refuseNonJson(req);
+    if (nonJson) {
+      return nonJson;
+    }
 
     return Response.json({ ok: true }, { headers: { 'Set-Cookie': sessionCookie('', 0, this.deps.secureCookies) } });
   }

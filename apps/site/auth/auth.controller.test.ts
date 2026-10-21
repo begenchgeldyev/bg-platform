@@ -22,6 +22,14 @@ function loginRequest(body: unknown, headers: Record<string, string> = {}): Requ
   });
 }
 
+function logoutRequest(headers: Record<string, string> = {}): Request {
+  return new Request('http://localhost/api/auth/logout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: '{}',
+  });
+}
+
 function cookieValue(setCookie: string, name = 'bg_session'): string {
   return setCookie.slice(`${name}=`.length).split(';')[0];
 }
@@ -109,7 +117,7 @@ describe('AuthController', () => {
   });
 
   test('logout clears the cookie', async () => {
-    const res = await controller({ secureCookies: true }).logout(new Request('http://localhost/api/auth/logout', { method: 'POST' }));
+    const res = await controller({ secureCookies: true }).logout(logoutRequest());
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
 
@@ -117,5 +125,18 @@ describe('AuthController', () => {
     expect(cookie).toContain('bg_session=;');
     expect(cookie).toContain('Max-Age=0');
     expect(cookie).toContain('Secure');
+  });
+
+  test('refuses a logout that is not JSON', async () => {
+    const res = await controller().logout(
+      new Request('http://localhost/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: '{}',
+      }),
+    );
+    expect(res.status).toBe(415);
+    expect(await res.json()).toEqual({ error: 'requests must be JSON' });
+    expect(res.headers.get('set-cookie')).toBeNull();
   });
 });
