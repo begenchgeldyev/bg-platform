@@ -134,6 +134,12 @@ describe('photo paths', () => {
     }
   });
 
+  test('refuses a parent segment after the server decodes once', () => {
+    for (const image of ['/public/..%2Fserver.ts', '/public/%2e%2e%2fserver.ts', '/public/projects/../photo.png']) {
+      expect(parseProjectChanges({ image })).toEqual({ ok: false, error: 'photo must be an uploaded image' });
+    }
+  });
+
   test('refuses a payload that is not real base64', () => {
     for (const payload of ['A', '=', 'A==', 'AAAA=']) {
       expect(parseProjectChanges({ image: `data:image/png;base64,${payload}` })).toEqual({

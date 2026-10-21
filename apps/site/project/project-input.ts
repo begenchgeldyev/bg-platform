@@ -44,9 +44,22 @@ function parseText(value: unknown, field: 'description' | 'content', maxChars: n
 // applies URL normalization, which is what decides where the <img src> request actually goes.
 const PUBLIC_IMAGE = /^\/public\/[A-Za-z0-9._~%/-]+$/;
 
+// servePublicAsset decodes the path once before joining it, so a parent segment hidden behind %2F escapes /public/.
+function hasParentSegment(image: string): boolean {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(image);
+  } catch {
+    return true;
+  }
+
+  return decoded.split('/').includes('..');
+}
+
 function isPublicImagePath(image: string): boolean {
   if (!PUBLIC_IMAGE.test(image)) return false;
-  return new URL(image, 'http://localhost').pathname.startsWith('/public/');
+  if (!new URL(image, 'http://localhost').pathname.startsWith('/public/')) return false;
+  return !hasParentSegment(image);
 }
 
 function parseImage(value: unknown): ParseResult<string | null> {
