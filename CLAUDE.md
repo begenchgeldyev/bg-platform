@@ -45,7 +45,7 @@ Client → Caddy (SSL termination) → Bun server (port 8613)
 ```
 
 The single Bun server (`apps/site/server.ts`) handles everything:
-1. **API routes** (`/title`, `/projects`, `/auth/login`, `/auth/logout`) — defined directly in `Bun.serve({ routes })`.
+1. **API routes** (`/api/version`, `/api/title`, `/api/projects`, `/api/ask`, `/api/lang`, `/api/auth/login`, `/api/auth/logout`) — defined directly in `Bun.serve({ routes })`, with the `/api` prefix applied by `withPrefix()`.
 2. **Static assets** (`/public/*`) — served from `apps/site/public/` via `servePublicAsset()`.
 3. **HTML pages** (everything else) — dispatched to `renderPage()` in `apps/site/site.ts`, except `/admin`, which `AdminController` renders.
 
@@ -104,7 +104,7 @@ Policies and user roles are stored in the database (`packages/core/db/schema.ts`
 
 Drizzle ORM with PostgreSQL. Schema: `projects`, `users` (with `role` enum: owner/editor/viewer), `policies` (with `effect` enum: allow/deny).
 
-Portfolio projects live in the `projects` table and are listed on `/projects`; seed them from `packages/core/db/seed.ts`. Each project has an `icon` (null means Automatic, otherwise one of `PROJECT_ICONS` in `apps/site/project/project-icons.ts`) and `tags` (text[]), both edited on `/admin`, where input limits live in `apps/site/project/project-input.ts`. Hidden projects are owner-only: they are left out of the list and the JSON for visitors, and their page returns 404. The seed inserts each project whose name is not in the table yet, so renaming a seeded project in the admin editor makes the next seed run add it again; it also re-inserts the `owner-full-access` policy if it is missing. Nothing runs the seed or migrations on deploy; to seed production, run `docker compose -f infra/compose.yml exec -T site bun /usr/src/app/packages/core/db/seed.ts` on the VPS. Apply migrations by hand before deploying code that needs them: run `drizzle-kit migrate` through an SSH tunnel to the VPS's loopback Postgres, since Postgres listens only on `127.0.0.1:5432` there.
+Portfolio projects live in the `projects` table and are listed on `/projects`; seed them from `packages/core/db/seed.ts`. Each project has an `icon` (null means Automatic, otherwise one of `PROJECT_ICONS` in `apps/site/project/project-icons.ts`) and `tags` (text[]), both edited on `/admin`, where input limits live in `apps/site/project/project-input.ts`. Hidden projects are owner-only: they are left out of the list and the JSON for visitors, and their page returns 404. The seed inserts each project whose name is not in the table yet, so renaming a seeded project in the admin editor makes the next seed run add it again; it also re-inserts the `owner-full-access` policy if it is missing. Nothing runs the seed or migrations on deploy; to seed production, run `docker compose -f infra/compose.yml exec -T site bun /usr/src/app/packages/core/db/seed.ts` on the VPS. Apply migrations by hand before deploying code that needs them: point `DATABASE_URL` through an SSH tunnel to the VPS's loopback Postgres (it listens only on `127.0.0.1:5432`) and run `bun run db:migrate` from the repo root.
 
 ### Infrastructure
 
