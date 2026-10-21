@@ -35,7 +35,8 @@ services:
   postgres:
     image: postgres:17-alpine
     ports:
-      - "5432:5432"
+      # Loopback only, for maintenance through an SSH tunnel. The site reaches Postgres over the compose network.
+      - "127.0.0.1:5432:5432"
     restart: unless-stopped
     environment:
       POSTGRES_USER: begench

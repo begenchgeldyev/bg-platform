@@ -105,6 +105,6 @@ Portfolio projects live in the `projects` table and are listed on `/projects`; s
 `infra/compose.yml` runs three services:
 - **caddy** — Caddy 2, terminates HTTPS via automatic Let's Encrypt, reverse-proxies to `site:8613`. Config lives in `infra/Caddyfile`.
 - **site** — the `apps/site` Bun app, built via `apps/site/Dockerfile` with the repo root as build context so it can install the workspace.
-- **postgres** — PostgreSQL 17. `DATABASE_URL` and `ADMIN_SECRET` are injected via `infra/site.env` (untracked; create from `infra/site.env.example`).
+- **postgres** — PostgreSQL 17. `DATABASE_URL` and `ADMIN_SECRET` are injected via `infra/site.env` (untracked; create from `infra/site.env.example`). `POSTGRES_PASSWORD` in `compose.yml` only seeds a brand-new data volume; production's real password exists only in the VPS's `infra/site.env`.
 
-Only Caddy exposes host ports (80/443). The site and Postgres talk on the internal `begenchgeldyev-network` bridge.
+Only Caddy is reachable from outside (80/443). Postgres is published on the VPS's loopback only (`127.0.0.1:5432`), for maintenance through an SSH tunnel. The site and Postgres talk on the internal `begenchgeldyev-network` bridge.
