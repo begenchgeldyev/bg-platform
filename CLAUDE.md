@@ -45,9 +45,17 @@ Client → Caddy (SSL termination) → Bun server (port 8613)
 ```
 
 The single Bun server (`apps/site/server.ts`) handles everything:
-1. **API routes** (`/title`, `/projects`) — defined directly in `Bun.serve({ routes })`.
+1. **API routes** (`/title`, `/projects`, `/auth/login`, `/auth/logout`) — defined directly in `Bun.serve({ routes })`.
 2. **Static assets** (`/public/*`) — served from `apps/site/public/` via `servePublicAsset()`.
-3. **HTML pages** (everything else) — dispatched to `renderPage()` in `apps/site/site.ts`.
+3. **HTML pages** (everything else) — dispatched to `renderPage()` in `apps/site/site.ts`, except `/admin`, which `AdminController` renders.
+
+Cross-site and non-JSON guards are shared in `apps/site/http/requests.ts`; per-IP rate limiting is in `apps/site/http/rate-limit.ts`.
+
+### Owner login and `/admin`
+
+`POST /api/auth/login` takes `{ secret }`, compares it to `ADMIN_SECRET`, and sets a signed `bg_session` cookie: HttpOnly, SameSite=Lax, 30 days, Secure in production. Login is rate-limited to 5 attempts per 15 minutes per IP; `POST /api/auth/logout` clears the cookie. Both require JSON. Session code is in `packages/core/auth/session.ts`; the endpoints are in `apps/site/auth/auth.controller.ts`.
+
+`/admin` (`apps/site/admin/admin.controller.ts`, templates in `apps/site/components/admin/`) is English-only, sent with `no-store` and `noindex`, and shows a login form, an "account can't edit" note, or the editor.
 
 ### SSR (server-side rendering)
 
@@ -81,16 +89,14 @@ Wiring lives in `apps/site/app-container.ts`. When adding new services, register
 
 ### ABAC authorization
 
-Routes that require authorization wrap their handler with `enforce()` from `packages/core/abac/pep.ts`:
-
-```ts
-POST: enforce(handler, { actions: 'create', resource: 'project' })
-```
+The PEP (`pep.ts`) takes the user's email from the signed `bg_session` cookie set by the admin login — there is no user header or client-set cookie any more.
 
 The enforcement pipeline:
-- **PEP** (`pep.ts`) — extracts `x-user-email` from the request header, fetches subject attributes and policies, calls the PDP.
+- **PEP** (`pep.ts`) — `canAccess(req, { actions, resource })` resolves the session email, fetches subject attributes and policies, calls the PDP.
 - **PDP** (`pdp.ts`) — pure function that evaluates policies against `{ subject, action, resource, resourceAttributes, context }`. Deny-overrides-allow; defaults to deny if no policy matches.
 - **PIP** (`pip.ts`) — fetches `users` and `policies` rows from Postgres.
+
+Project writes do not use `enforce()`. `ProjectController` authorizes inside itself through an injected `canEditProjects(req)`, wired in `apps/site/app-container.ts`; it returns false without a database query when there is no session, and otherwise calls `canAccess(req, { actions: 'update', resource: 'project' })`. `enforce()` still exists in core but no route uses it.
 
 Policies and user roles are stored in the database (`packages/core/db/schema.ts`). Seed the initial owner account and allow-all policy with `bun run db:seed`.
 
@@ -98,7 +104,7 @@ Policies and user roles are stored in the database (`packages/core/db/schema.ts`
 
 Drizzle ORM with PostgreSQL. Schema: `projects`, `users` (with `role` enum: owner/editor/viewer), `policies` (with `effect` enum: allow/deny).
 
-Portfolio projects live in the `projects` table and are listed on `/projects`; seed them from `packages/core/db/seed.ts`. A card's tags come from a `Stack: A, B, C` line in the project's content (`apps/site/project/stack-tags.ts`), so edit that line to change them. The seed inserts each project whose name is not in the table yet, so renaming a seeded project in the admin editor makes the next seed run add it again. Nothing runs the seed on deploy; to seed production, run `docker compose -f infra/compose.yml exec -T site bun /usr/src/app/packages/core/db/seed.ts` on the VPS.
+Portfolio projects live in the `projects` table and are listed on `/projects`; seed them from `packages/core/db/seed.ts`. Each project has an `icon` (null means Automatic, otherwise one of `PROJECT_ICONS` in `apps/site/project/project-icons.ts`) and `tags` (text[]), both edited on `/admin`, where input limits live in `apps/site/project/project-input.ts`. Hidden projects are owner-only: they are left out of the list and the JSON for visitors, and their page returns 404. The seed inserts each project whose name is not in the table yet, so renaming a seeded project in the admin editor makes the next seed run add it again; it also re-inserts the `owner-full-access` policy if it is missing. Nothing runs the seed or migrations on deploy; to seed production, run `docker compose -f infra/compose.yml exec -T site bun /usr/src/app/packages/core/db/seed.ts` on the VPS. Apply migrations by hand before deploying code that needs them: run `drizzle-kit migrate` through an SSH tunnel to the VPS's loopback Postgres, since Postgres listens only on `127.0.0.1:5432` there.
 
 ### Infrastructure
 
