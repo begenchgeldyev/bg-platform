@@ -24,7 +24,7 @@ bun run lint         # biome check (no writes)
 bun run format       # biome check --write (formats + organizes imports)
 bun run db:generate  # generate SQL migrations from schema changes
 bun run db:migrate   # apply migrations to postgres
-bun run db:seed      # seed owner user and default policies
+bun run db:seed      # seed owner user, default policies and portfolio projects (safe to re-run)
 ```
 
 Local Docker stack:
@@ -97,6 +97,8 @@ Policies and user roles are stored in the database (`packages/core/db/schema.ts`
 ### Database
 
 Drizzle ORM with PostgreSQL. Schema: `projects`, `users` (with `role` enum: owner/editor/viewer), `policies` (with `effect` enum: allow/deny).
+
+Portfolio projects live in the `projects` table and are listed on `/projects`; seed them from `packages/core/db/seed.ts`. The seed inserts each project whose name is not in the table yet, so renaming a seeded project in the admin editor makes the next seed run add it again. Nothing runs the seed on deploy; to seed production, run `docker compose -f infra/compose.yml exec -T site bun /usr/src/app/packages/core/db/seed.ts` on the VPS.
 
 ### Infrastructure
 
