@@ -98,7 +98,7 @@ Policies and user roles are stored in the database (`packages/core/db/schema.ts`
 
 Drizzle ORM with PostgreSQL. Schema: `projects`, `users` (with `role` enum: owner/editor/viewer), `policies` (with `effect` enum: allow/deny).
 
-Portfolio projects live in the `projects` table and are listed on `/projects`; seed them from `packages/core/db/seed.ts`. The seed inserts each project whose name is not in the table yet, so renaming a seeded project in the admin editor makes the next seed run add it again. Nothing runs the seed on deploy; to seed production, run `docker compose -f infra/compose.yml exec -T site bun /usr/src/app/packages/core/db/seed.ts` on the VPS.
+Portfolio projects live in the `projects` table and are listed on `/projects`; seed them from `packages/core/db/seed.ts`. A card's tags come from a `Stack: A, B, C` line in the project's content (`apps/site/project/stack-tags.ts`), so edit that line to change them. The seed inserts each project whose name is not in the table yet, so renaming a seeded project in the admin editor makes the next seed run add it again. Nothing runs the seed on deploy; to seed production, run `docker compose -f infra/compose.yml exec -T site bun /usr/src/app/packages/core/db/seed.ts` on the VPS.
 
 ### Infrastructure
 
