@@ -1,3 +1,4 @@
+import { sessionEmail } from '../auth/session';
 import { evaluate } from './pdp';
 import { getPolicies, getSubjectAttributes } from './pip';
 
@@ -8,12 +9,7 @@ type ABACContext = {
 };
 
 export function resolveEmail(req: Request): string | null {
-  const header = req.headers.get('x-user-email');
-  if (header) return header;
-
-  const cookieHeader = req.headers.get('cookie') ?? '';
-  const match = cookieHeader.match(/(?:^|;\s*)dev-user-email=([^;]+)/);
-  return match ? decodeURIComponent(match[1]) : null;
+  return sessionEmail(req);
 }
 
 export async function canAccess(req: Request, abacContext: ABACContext): Promise<boolean> {
