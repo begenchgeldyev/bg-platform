@@ -2,6 +2,7 @@ import { openai } from '@ai-sdk/openai';
 import { Container, db, ProjectsRepository } from '@bg/core';
 import { AskController } from './ask/ask.controller';
 import { loadCvText } from './ask/cv-knowledge';
+import { AuthController } from './auth/auth.controller';
 import { createRateLimiter } from './http/rate-limit';
 import { ProjectController } from './project/project.controller';
 
@@ -20,5 +21,13 @@ container.registerFactory(AskController, () => {
     model: process.env.OPENAI_API_KEY ? openai(process.env.OPENAI_MODEL || 'gpt-5.4-mini') : null,
     rateLimiter: createRateLimiter({ limit: 10, windowMs: 10 * 60 * 1000 }),
     loadCvText,
+  });
+});
+
+container.registerFactory(AuthController, () => {
+  return new AuthController({
+    adminSecret: process.env.ADMIN_SECRET,
+    rateLimiter: createRateLimiter({ limit: 5, windowMs: 15 * 60 * 1000 }),
+    secureCookies: process.env.NODE_ENV === 'production',
   });
 });

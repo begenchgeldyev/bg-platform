@@ -2,6 +2,7 @@ import { canAccess, enforce, resolveEmail } from '@bg/core/abac/pep';
 import type { Server } from 'bun';
 import { container } from './app-container';
 import { AskController } from './ask/ask.controller';
+import { AuthController } from './auth/auth.controller';
 import { buildClientBundle, serveClientBundle } from './client-bundle';
 import { resolveLang } from './i18n';
 import { handleLangRequest } from './lang-route';
@@ -38,21 +39,7 @@ Bun.serve({
         POST: enforce((req) => container.resolve(ProjectController).post(req), { actions: 'create', resource: 'project' }),
       },
       '/auth/login': {
-        POST: async (req) => {
-          let body: { secret?: string; email?: string } = {};
-          try {
-            body = await req.json();
-          } catch {
-            /* ignore */
-          }
-          const secret = process.env.ADMIN_SECRET;
-          if (!secret || body.secret !== secret) {
-            return Response.json({ error: 'Forbidden' }, { status: 403 });
-          }
-          const email = body.email ?? 'begenchgeldyev@gmail.com';
-          const cookie = `dev-user-email=${encodeURIComponent(email)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`;
-          return Response.json({ ok: true }, { headers: { 'Set-Cookie': cookie } });
-        },
+        POST: (req: Request, server: Server<undefined>) => container.resolve(AuthController).login(req, clientIp(req, server)),
       },
       '/lang': {
         POST: (req: Request) => handleLangRequest(req),
@@ -64,10 +51,7 @@ Bun.serve({
         },
       },
       '/auth/logout': {
-        POST: () => {
-          const cookie = `dev-user-email=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
-          return Response.json({ ok: true }, { headers: { 'Set-Cookie': cookie } });
-        },
+        POST: (req: Request) => container.resolve(AuthController).logout(req),
       },
     }),
     {
