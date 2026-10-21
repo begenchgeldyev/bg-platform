@@ -2,6 +2,7 @@ import { canAccess, Injectable, type ProjectsRepository } from '@bg/core';
 import { type Lang, resolveLang, t } from '../i18n';
 import { renderComponentTemplate, renderDocument } from '../site';
 import { cardColSpans } from './card-layout';
+import { guessProjectIcon } from './project-icons';
 import { extractStackTags } from './stack-tags';
 
 type ProjectRecord = Awaited<ReturnType<ProjectsRepository['list']>>[number];
@@ -24,13 +25,6 @@ function formatProjectDate(value: Date | null, lang: Lang) {
 
 function serializeForScript(value: unknown) {
   return JSON.stringify(value).replaceAll('<', '\\u003c');
-}
-
-function getProjectIcon(name: string, description: string): string {
-  const text = `${name} ${description}`.toLowerCase();
-  if (/\bbot\b/.test(text)) return 'smart_toy';
-  if (/\bweb|\bsite\b|\bportfolio\b|\bblog\b/.test(text)) return 'web';
-  return 'terminal';
 }
 
 async function renderContentHtml(value: string | null) {
@@ -110,7 +104,7 @@ async function renderProjectCard(project: ProjectRecord, index: number, total: n
     colSpanClass,
     description,
     hiddenBadge,
-    icon: escapeHtml(getProjectIcon(project.name, project.description ?? '')),
+    icon: escapeHtml(guessProjectIcon(project.name, project.description)),
     name,
     projectHref: `/projects/${project.id}`,
     tagsHtml: renderPlainTags(tags),
