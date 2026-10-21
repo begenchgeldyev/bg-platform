@@ -1,4 +1,5 @@
 import type { Server } from 'bun';
+import { AdminController } from './admin/admin.controller';
 import { container } from './app-container';
 import { AskController } from './ask/ask.controller';
 import { AuthController } from './auth/auth.controller';
@@ -55,6 +56,9 @@ Bun.serve({
     }),
     {
       '/assets/ask-chat.js': (req: Request) => serveClientBundle(req, askChatBundle),
+      '/admin': {
+        GET: (req: Request) => container.resolve(AdminController).page(req),
+      },
     },
   ),
 

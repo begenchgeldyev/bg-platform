@@ -1,0 +1,129 @@
+import { Injectable, type ProjectsRepository } from '@bg/core';
+import { resolveLang } from '../i18n';
+import type { CanEditProjects } from '../project/project.controller';
+import { PROJECT_ICONS } from '../project/project-icons';
+import { renderComponentTemplate, renderDocument } from '../site';
+
+export interface AdminControllerDeps {
+  projectsRepository: ProjectsRepository;
+  canEditProjects: CanEditProjects;
+  sessionEmail: (req: Request) => string | null;
+}
+
+function renderUnauthorized(): string {
+  return `<main class="max-w-xl mx-auto px-6 py-24 min-h-[60vh] flex flex-col justify-center">
+  <div class="border border-outline-variant/50 bg-surface-container-lowest/80 p-8 md:p-10 text-center space-y-6">
+    <div class="w-12 h-12 mx-auto bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+      <span class="material-symbols-outlined text-2xl" aria-hidden="true">lock</span>
+    </div>
+    <div class="space-y-2">
+      <div class="font-mono text-xs uppercase tracking-[0.2em] text-outline">[ACCESS RESTRICTED]</div>
+      <p class="font-mono text-sm text-on-surface leading-relaxed">
+        You're logged in, but this account can't edit projects yet.
+      </p>
+    </div>
+    <div>
+      <button
+        id="admin-unauthorized-logout"
+        type="button"
+        class="border border-outline-variant/60 bg-surface hover:border-primary-container hover:text-primary-container px-6 py-2.5 font-mono text-xs uppercase tracking-[0.2em] text-on-surface transition-colors cursor-pointer">
+        [LOG OUT]
+      </button>
+    </div>
+  </div>
+</main>
+<script>
+  (function() {
+    const btn = document.getElementById('admin-unauthorized-logout');
+    if (!btn) return;
+    const doLogout = async () => {
+      btn.disabled = true;
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        });
+      } finally {
+        window.location.reload();
+      }
+    };
+    btn.addEventListener('mousedown', (e) => {
+      if (e.button === 0) {
+        e.preventDefault();
+        doLogout();
+      }
+    });
+    btn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        doLogout();
+      }
+    });
+  })();
+</script>`;
+}
+
+@Injectable()
+export class AdminController {
+  private readonly projectsRepository: ProjectsRepository;
+  private readonly canEditProjects: CanEditProjects;
+  private readonly sessionEmail: (req: Request) => string | null;
+
+  constructor(deps: AdminControllerDeps) {
+    this.projectsRepository = deps.projectsRepository;
+    this.canEditProjects = deps.canEditProjects;
+    this.sessionEmail = deps.sessionEmail;
+  }
+
+  async page(req: Request): Promise<Response> {
+    const lang = resolveLang(req);
+    const email = this.sessionEmail(req);
+
+    const docConfig = {
+      title: {
+        en: 'ADMIN — BEGENCH_GELDYEV@ROOT:~$',
+        ru: 'ADMIN — BEGENCH_GELDYEV@ROOT:~$',
+      },
+      fragmentFile: 'projects.html',
+      brandIsLink: true,
+      footerVariant: 'default' as const,
+      showTerminalIcon: true,
+    };
+
+    const responseHeaders = {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'X-Robots-Tag': 'noindex',
+    };
+
+    if (!email) {
+      const content = await renderComponentTemplate('admin/login.html');
+      return new Response(await renderDocument(docConfig, content, lang), {
+        headers: responseHeaders,
+      });
+    }
+
+    const canEdit = await this.canEditProjects(req);
+    if (!canEdit) {
+      const content = renderUnauthorized();
+      return new Response(await renderDocument(docConfig, content, lang), {
+        headers: responseHeaders,
+      });
+    }
+
+    const projects = await this.projectsRepository.list({ includeHidden: true });
+    const serializedProjects = JSON.stringify(projects).replaceAll('<', '\\u003c');
+    const serializedIcons = JSON.stringify(PROJECT_ICONS).replaceAll('<', '\\u003c');
+    const script = await renderComponentTemplate('admin/script.html');
+    const content = await renderComponentTemplate('admin/page.html', {
+      projectsJson: serializedProjects,
+      iconsJson: serializedIcons,
+      script,
+    });
+
+    return new Response(await renderDocument(docConfig, content, lang), {
+      headers: responseHeaders,
+    });
+  }
+}

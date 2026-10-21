@@ -1,0 +1,489 @@
+<script>
+(() => {
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  function onAction(el, handler) {
+    if (!el) return;
+    el.addEventListener('mousedown', (e) => {
+      if (e.button === 0) {
+        e.preventDefault();
+        handler(e);
+      }
+    });
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        handler(e);
+      }
+    });
+  }
+
+  const projectsDataEl = document.getElementById('admin-projects-data');
+  const iconsDataEl = document.getElementById('admin-icons-data');
+  let projects = [];
+  try {
+    projects = projectsDataEl ? JSON.parse(projectsDataEl.textContent || '[]') : [];
+  } catch (err) {
+    console.error('Failed to parse admin projects JSON', err);
+  }
+
+  let projectIcons = [];
+  try {
+    projectIcons = iconsDataEl ? JSON.parse(iconsDataEl.textContent || '[]') : [];
+  } catch (err) {
+    console.error('Failed to parse admin icons JSON', err);
+  }
+
+  let currentProjectId = null;
+  let currentIcon = null;
+  let currentImage = '';
+  let inFlight = false;
+
+  const projectListEl = document.getElementById('admin-project-list');
+  const projectCountEl = document.getElementById('admin-project-count');
+  const newProjectBtn = document.getElementById('admin-new-project-btn');
+  const logoutBtn = document.getElementById('admin-logout-btn');
+  const editorModeBadge = document.getElementById('admin-editor-mode-badge');
+  const viewLiveLink = document.getElementById('admin-view-live-link');
+  const editorStatusEl = document.getElementById('admin-editor-status');
+
+  const formName = document.getElementById('admin-form-name');
+  const formHidden = document.getElementById('admin-form-hidden');
+  const formDescription = document.getElementById('admin-form-description');
+  const formTags = document.getElementById('admin-form-tags');
+  const tagsPreview = document.getElementById('admin-tags-preview');
+  const formContent = document.getElementById('admin-form-content');
+  const iconGrid = document.getElementById('admin-icon-grid');
+  const selectedIconText = document.getElementById('admin-selected-icon-text');
+
+  const photoInput = document.getElementById('admin-photo-input');
+  const photoPreviewImg = document.getElementById('admin-photo-preview-img');
+  const photoPlaceholder = document.getElementById('admin-photo-placeholder');
+  const photoUploadTrigger = document.getElementById('admin-photo-upload-trigger');
+  const photoRemoveTrigger = document.getElementById('admin-photo-remove-trigger');
+
+  const saveBtn = document.getElementById('admin-save-btn');
+  const resetBtn = document.getElementById('admin-reset-btn');
+  const deleteBtn = document.getElementById('admin-delete-btn');
+
+  function showStatus(message, isError) {
+    if (!editorStatusEl) return;
+    editorStatusEl.textContent = message;
+    editorStatusEl.className = isError
+      ? 'block border border-error/50 bg-error-container/20 text-error font-mono text-xs p-3.5 leading-relaxed'
+      : 'block border border-primary-container/50 bg-primary-container/10 text-primary-container font-mono text-xs p-3.5 leading-relaxed';
+  }
+
+  function clearStatus() {
+    if (!editorStatusEl) return;
+    editorStatusEl.textContent = '';
+    editorStatusEl.className = 'hidden font-mono text-xs p-3.5 leading-relaxed';
+  }
+
+  function updateTagsPreview() {
+    if (!tagsPreview || !formTags) return;
+    const raw = formTags.value;
+    const tags = raw
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+    if (tags.length === 0) {
+      tagsPreview.innerHTML = '<span class="text-[10px] font-mono text-outline-variant/60 italic">No tags defined</span>';
+      return;
+    }
+    tagsPreview.innerHTML = tags
+      .map(
+        (t) =>
+          `<span class="text-[9px] font-mono font-bold border border-outline-variant/60 bg-surface/40 px-2 py-1 text-on-surface-variant uppercase">${escapeHtml(t)}</span>`,
+      )
+      .join('');
+  }
+
+  function updatePhotoPreview() {
+    if (!photoPreviewImg || !photoPlaceholder || !photoRemoveTrigger) return;
+    if (currentImage?.trim()) {
+      photoPreviewImg.src = currentImage;
+      photoPreviewImg.classList.remove('hidden');
+      photoPlaceholder.classList.add('hidden');
+      photoRemoveTrigger.classList.remove('hidden');
+    } else {
+      photoPreviewImg.src = '';
+      photoPreviewImg.classList.add('hidden');
+      photoPlaceholder.classList.remove('hidden');
+      photoRemoveTrigger.classList.add('hidden');
+    }
+  }
+
+  function updateIconSelector() {
+    if (!iconGrid || !selectedIconText) return;
+    selectedIconText.textContent = currentIcon || 'Automatic';
+
+    const buttons = iconGrid.querySelectorAll('[data-icon-val]');
+    buttons.forEach((btn) => {
+      const val = btn.dataset.iconVal;
+      const isSelected = (!currentIcon && val === '') || (currentIcon && val === currentIcon);
+      if (isSelected) {
+        btn.className =
+          'flex flex-col items-center justify-center p-2 border border-primary-container bg-primary-container/20 text-primary-container ring-1 ring-primary-container cursor-pointer transition-all';
+      } else {
+        btn.className =
+          'flex flex-col items-center justify-center p-2 border border-outline-variant/30 bg-surface/40 text-on-surface-variant hover:border-outline-variant/80 hover:text-white cursor-pointer transition-all';
+      }
+    });
+  }
+
+  function renderIconGrid() {
+    if (!iconGrid) return;
+    iconGrid.innerHTML = '';
+
+    const autoBtn = document.createElement('button');
+    autoBtn.type = 'button';
+    autoBtn.dataset.iconVal = '';
+    autoBtn.title = 'Automatic (inferred from name and description)';
+    autoBtn.innerHTML = `
+      <span class="material-symbols-outlined text-lg" aria-hidden="true">auto_awesome</span>
+      <span class="text-[9px] font-mono uppercase tracking-tighter mt-1 truncate w-full text-center">Auto</span>
+    `;
+    onAction(autoBtn, () => {
+      currentIcon = null;
+      updateIconSelector();
+    });
+    iconGrid.appendChild(autoBtn);
+
+    projectIcons.forEach((iconName) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.dataset.iconVal = iconName;
+      btn.title = iconName;
+      btn.innerHTML = `
+        <span class="material-symbols-outlined text-lg" aria-hidden="true">${escapeHtml(iconName)}</span>
+        <span class="text-[9px] font-mono uppercase tracking-tighter mt-1 truncate w-full text-center">${escapeHtml(iconName)}</span>
+      `;
+      onAction(btn, () => {
+        currentIcon = iconName;
+        updateIconSelector();
+      });
+      iconGrid.appendChild(btn);
+    });
+
+    updateIconSelector();
+  }
+
+  function renderProjectList() {
+    if (!projectListEl || !projectCountEl) return;
+    projectCountEl.textContent = String(projects.length);
+    projectListEl.innerHTML = '';
+
+    if (projects.length === 0) {
+      projectListEl.innerHTML = `
+        <div class="p-6 text-center border border-dashed border-outline-variant/30 text-on-surface-variant font-mono text-xs">
+          No projects found in database.
+        </div>
+      `;
+      return;
+    }
+
+    projects.forEach((proj) => {
+      const isSelected = proj.id === currentProjectId;
+      const item = document.createElement('div');
+      item.dataset.projectId = String(proj.id);
+      item.className = isSelected
+        ? 'p-3 border border-primary-container bg-surface-container-high transition-all cursor-pointer'
+        : 'p-3 border border-outline-variant/30 bg-surface/50 hover:border-outline-variant/70 hover:bg-surface transition-all cursor-pointer';
+
+      const iconName = proj.icon || 'terminal';
+      const statusBadge = proj.isHidden
+        ? `<span class="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 border border-amber-500/40 bg-amber-500/10 text-amber-400">Hidden</span>`
+        : `<span class="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 border border-primary-container/40 bg-primary-container/10 text-primary-container">Published</span>`;
+
+      item.innerHTML = `
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <span class="material-symbols-outlined text-base text-primary-container flex-shrink-0" aria-hidden="true">${escapeHtml(iconName)}</span>
+            <span class="font-mono text-xs font-bold text-white truncate uppercase">${escapeHtml(proj.name)}</span>
+          </div>
+          <div class="flex-shrink-0">
+            ${statusBadge}
+          </div>
+        </div>
+      `;
+
+      onAction(item, () => {
+        selectProject(proj.id);
+      });
+
+      projectListEl.appendChild(item);
+    });
+  }
+
+  function selectProject(id) {
+    const proj = projects.find((p) => p.id === id);
+    if (!proj) {
+      selectNewProject();
+      return;
+    }
+
+    currentProjectId = proj.id;
+    currentIcon = proj.icon || null;
+    currentImage = proj.image || '';
+
+    if (formName) formName.value = proj.name || '';
+    if (formHidden) formHidden.checked = Boolean(proj.isHidden);
+    if (formDescription) formDescription.value = proj.description || '';
+    if (formTags) formTags.value = (proj.tags || []).join(', ');
+    if (formContent) formContent.value = proj.content || '';
+
+    if (editorModeBadge) {
+      editorModeBadge.textContent = `[MODE: EDITING #${proj.id}]`;
+    }
+    if (viewLiveLink) {
+      viewLiveLink.href = `/projects/${proj.id}`;
+      viewLiveLink.classList.remove('hidden');
+    }
+    if (deleteBtn) {
+      deleteBtn.classList.remove('hidden');
+    }
+
+    updateTagsPreview();
+    updatePhotoPreview();
+    updateIconSelector();
+    renderProjectList();
+    clearStatus();
+  }
+
+  function selectNewProject() {
+    currentProjectId = null;
+    currentIcon = null;
+    currentImage = '';
+
+    if (formName) formName.value = '';
+    if (formHidden) formHidden.checked = false;
+    if (formDescription) formDescription.value = '';
+    if (formTags) formTags.value = '';
+    if (formContent) formContent.value = '';
+
+    if (editorModeBadge) {
+      editorModeBadge.textContent = '[MODE: NEW PROJECT]';
+    }
+    if (viewLiveLink) {
+      viewLiveLink.href = '#';
+      viewLiveLink.classList.add('hidden');
+    }
+    if (deleteBtn) {
+      deleteBtn.classList.add('hidden');
+    }
+
+    updateTagsPreview();
+    updatePhotoPreview();
+    updateIconSelector();
+    renderProjectList();
+    clearStatus();
+    if (formName) formName.focus();
+  }
+
+  if (photoUploadTrigger && photoInput) {
+    onAction(photoUploadTrigger, () => {
+      photoInput.click();
+    });
+
+    photoInput.addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const maxBytes = 2 * 1024 * 1024;
+      if (file.size > maxBytes) {
+        showStatus(`File exceeds 2 MB limit (${(file.size / (1024 * 1024)).toFixed(2)} MB). Refused before reading.`, true);
+        photoInput.value = '';
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (loadEvent) => {
+        currentImage = typeof loadEvent.target?.result === 'string' ? loadEvent.target.result : '';
+        updatePhotoPreview();
+        photoInput.value = '';
+        clearStatus();
+      };
+      reader.onerror = () => {
+        showStatus('Failed to read file as data URL', true);
+        photoInput.value = '';
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  if (photoRemoveTrigger) {
+    onAction(photoRemoveTrigger, () => {
+      currentImage = '';
+      updatePhotoPreview();
+      if (photoInput) photoInput.value = '';
+    });
+  }
+
+  if (formTags) {
+    formTags.addEventListener('input', updateTagsPreview);
+  }
+
+  async function handleSave() {
+    if (inFlight) return;
+    const nameVal = formName ? formName.value.trim() : '';
+    if (!nameVal) {
+      showStatus('Project name is required', true);
+      if (formName) formName.focus();
+      return;
+    }
+
+    const rawTags = formTags ? formTags.value : '';
+    const tags = rawTags
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    const payload = {
+      name: nameVal,
+      description: formDescription?.value?.trim() || null,
+      content: formContent?.value?.trim() || null,
+      tags: tags,
+      icon: currentIcon,
+      image: currentImage || null,
+      isHidden: Boolean(formHidden?.checked),
+    };
+
+    inFlight = true;
+    if (saveBtn) saveBtn.disabled = true;
+    showStatus('Saving project to database…', false);
+
+    try {
+      if (currentProjectId === null) {
+        const res = await fetch('/api/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (res.status === 201) {
+          const data = await res.json();
+          projects.push(data.project);
+          selectProject(data.project.id);
+          showStatus(`Project created successfully (#${data.project.id})`, false);
+        } else {
+          const data = await res.json().catch(() => ({}));
+          showStatus(data.error || 'Failed to create project', true);
+        }
+      } else {
+        const res = await fetch(`/api/projects/${currentProjectId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const idx = projects.findIndex((p) => p.id === currentProjectId);
+          if (idx !== -1) {
+            projects[idx] = data.project;
+          }
+          selectProject(data.project.id);
+          showStatus('Project saved successfully', false);
+        } else {
+          const data = await res.json().catch(() => ({}));
+          showStatus(data.error || 'Failed to update project', true);
+        }
+      }
+    } catch (err) {
+      showStatus('Network error while saving project', true);
+    } finally {
+      inFlight = false;
+      if (saveBtn) saveBtn.disabled = false;
+    }
+  }
+
+  if (saveBtn) {
+    onAction(saveBtn, handleSave);
+  }
+
+  if (resetBtn) {
+    onAction(resetBtn, () => {
+      if (currentProjectId !== null) {
+        selectProject(currentProjectId);
+      } else {
+        selectNewProject();
+      }
+    });
+  }
+
+  async function handleDelete() {
+    if (inFlight || currentProjectId === null) return;
+    const proj = projects.find((p) => p.id === currentProjectId);
+    const confirmed = window.confirm(`Are you sure you want to permanently delete "${proj ? proj.name : 'this project'}"?`);
+    if (!confirmed) return;
+
+    inFlight = true;
+    if (deleteBtn) deleteBtn.disabled = true;
+    showStatus('Deleting project…', false);
+
+    try {
+      const res = await fetch(`/api/projects/${currentProjectId}`, {
+        method: 'DELETE',
+      });
+
+      if (res.status === 204) {
+        projects = projects.filter((p) => p.id !== currentProjectId);
+        selectNewProject();
+        showStatus('Project deleted successfully', false);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showStatus(data.error || 'Failed to delete project', true);
+      }
+    } catch (err) {
+      showStatus('Network error while deleting project', true);
+    } finally {
+      inFlight = false;
+      if (deleteBtn) deleteBtn.disabled = false;
+    }
+  }
+
+  if (deleteBtn) {
+    onAction(deleteBtn, handleDelete);
+  }
+
+  if (newProjectBtn) {
+    onAction(newProjectBtn, () => {
+      selectNewProject();
+    });
+  }
+
+  async function handleLogout() {
+    if (logoutBtn) logoutBtn.disabled = true;
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+    } finally {
+      window.location.reload();
+    }
+  }
+
+  if (logoutBtn) {
+    onAction(logoutBtn, handleLogout);
+  }
+
+  renderIconGrid();
+  renderProjectList();
+  if (projects.length > 0) {
+    selectProject(projects[0].id);
+  } else {
+    selectNewProject();
+  }
+})();
+</script>

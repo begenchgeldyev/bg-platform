@@ -190,6 +190,7 @@ async function renderProjectPage(req: Request, project: ProjectRecord, canEdit: 
     projectId: String(project.id),
     projectName: escapeHtml(project.name),
     route: `/projects/${project.id}`,
+    tagsHtml: renderPlainTags(project.tags),
     updatedAt: escapeHtml(updatedAt),
     visibility: escapeHtml(visibility),
   });

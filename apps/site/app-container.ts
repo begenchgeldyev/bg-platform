@@ -1,5 +1,6 @@
 import { openai } from '@ai-sdk/openai';
-import { Container, canAccess, db, ProjectsRepository, resolveEmail } from '@bg/core';
+import { Container, canAccess, db, ProjectsRepository, resolveEmail, sessionEmail } from '@bg/core';
+import { AdminController } from './admin/admin.controller';
 import { AskController } from './ask/ask.controller';
 import { loadCvText } from './ask/cv-knowledge';
 import { AuthController } from './auth/auth.controller';
@@ -23,6 +24,14 @@ const canEditProjects: CanEditProjects = async (req) => {
 
 container.registerFactory(ProjectController, (c) => {
   return new ProjectController(c.resolve(ProjectsRepository), canEditProjects);
+});
+
+container.registerFactory(AdminController, (c) => {
+  return new AdminController({
+    projectsRepository: c.resolve(ProjectsRepository),
+    canEditProjects,
+    sessionEmail,
+  });
 });
 
 container.registerFactory(AskController, () => {

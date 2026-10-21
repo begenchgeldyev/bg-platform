@@ -142,6 +142,26 @@ describe('ProjectController.getPageById', () => {
     const response = await owner.controller.getPageById(new Request('http://localhost/projects/99'), 99);
     expect(response.status).toBe(404);
   });
+
+  test('renders tag chips when project has tags, and nothing when empty', async () => {
+    const withTags = controller({
+      projects: [project({ id: 1, tags: ['TypeScript', 'Bun'] })],
+      canEdit: false,
+    });
+    const resWithTags = await withTags.controller.getPageById(new Request('http://localhost/projects/1'), 1);
+    const htmlWithTags = await resWithTags.text();
+    expect(htmlWithTags).toContain('TypeScript');
+    expect(htmlWithTags).toContain('Bun');
+
+    const noTags = controller({
+      projects: [project({ id: 2, tags: [] })],
+      canEdit: false,
+    });
+    const resNoTags = await noTags.controller.getPageById(new Request('http://localhost/projects/2'), 2);
+    const htmlNoTags = await resNoTags.text();
+    expect(htmlNoTags).not.toContain('TypeScript');
+    expect(htmlNoTags).not.toContain('<span class="text-[9px]');
+  });
 });
 
 describe('ProjectController writes', () => {
