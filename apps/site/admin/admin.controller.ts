@@ -1,5 +1,4 @@
 import { Injectable, type ProjectsRepository } from '@bg/core';
-import { resolveLang } from '../i18n';
 import type { CanEditProjects } from '../project/project.controller';
 import { PROJECT_ICONS } from '../project/project-icons';
 import { renderComponentTemplate, renderDocument } from '../site';
@@ -22,6 +21,7 @@ function renderUnauthorized(): string {
         You're logged in, but this account can't edit projects yet.
       </p>
     </div>
+    <div id="admin-unauthorized-status" role="alert" class="hidden border border-error/50 bg-error-container/20 text-error font-mono text-xs p-3 leading-normal"></div>
     <div>
       <button
         id="admin-unauthorized-logout"
@@ -33,19 +33,38 @@ function renderUnauthorized(): string {
   </div>
 </main>
 <script>
-  (function() {
+  (() => {
     const btn = document.getElementById('admin-unauthorized-logout');
+    const statusEl = document.getElementById('admin-unauthorized-status');
     if (!btn) return;
     const doLogout = async () => {
       btn.disabled = true;
+      if (statusEl) {
+        statusEl.classList.add('hidden');
+        statusEl.textContent = '';
+      }
       try {
-        await fetch('/api/auth/logout', {
+        const res = await fetch('/api/auth/logout', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: '{}',
         });
+        if (res.ok) {
+          window.location.reload();
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        if (statusEl) {
+          statusEl.textContent = data.error || 'Failed to log out';
+          statusEl.classList.remove('hidden');
+        }
+      } catch (_err) {
+        if (statusEl) {
+          statusEl.textContent = 'Network error while logging out';
+          statusEl.classList.remove('hidden');
+        }
       } finally {
-        window.location.reload();
+        btn.disabled = false;
       }
     };
     btn.addEventListener('mousedown', (e) => {
@@ -77,7 +96,6 @@ export class AdminController {
   }
 
   async page(req: Request): Promise<Response> {
-    const lang = resolveLang(req);
     const email = this.sessionEmail(req);
 
     const docConfig = {
@@ -99,7 +117,7 @@ export class AdminController {
 
     if (!email) {
       const content = await renderComponentTemplate('admin/login.html');
-      return new Response(await renderDocument(docConfig, content, lang), {
+      return new Response(await renderDocument(docConfig, content, 'en'), {
         headers: responseHeaders,
       });
     }
@@ -107,7 +125,7 @@ export class AdminController {
     const canEdit = await this.canEditProjects(req);
     if (!canEdit) {
       const content = renderUnauthorized();
-      return new Response(await renderDocument(docConfig, content, lang), {
+      return new Response(await renderDocument(docConfig, content, 'en'), {
         headers: responseHeaders,
       });
     }
@@ -122,7 +140,7 @@ export class AdminController {
       script,
     });
 
-    return new Response(await renderDocument(docConfig, content, lang), {
+    return new Response(await renderDocument(docConfig, content, 'en'), {
       headers: responseHeaders,
     });
   }

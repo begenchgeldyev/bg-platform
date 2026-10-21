@@ -99,4 +99,23 @@ describe('AdminController', () => {
     const html = await response.text();
     expect(html).not.toContain('</script><img');
   });
+
+  test('renders in English even when the request has a Russian lang cookie', async () => {
+    const controller = createController({
+      projects: [project({ name: 'Demo' })],
+      email: 'begenchgeldyev@gmail.com',
+      canEdit: true,
+    });
+    const request = new Request('http://localhost/admin', {
+      headers: { Cookie: 'lang=ru' },
+    });
+    const response = await controller.page(request);
+    expect(response.status).toBe(200);
+
+    const html = await response.text();
+    expect(html).toContain('<html class="dark" lang="en">');
+    expect(html).not.toContain('<html class="dark" lang="ru">');
+    expect(html).toContain('>Projects<');
+    expect(html).not.toContain('>ПРОЕКТЫ<');
+  });
 });

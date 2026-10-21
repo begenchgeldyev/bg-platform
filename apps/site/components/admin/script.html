@@ -74,6 +74,18 @@
   const resetBtn = document.getElementById('admin-reset-btn');
   const deleteBtn = document.getElementById('admin-delete-btn');
 
+  function setDisabled(disabled) {
+    if (saveBtn) saveBtn.disabled = disabled;
+    if (resetBtn) resetBtn.disabled = disabled;
+    if (deleteBtn) deleteBtn.disabled = disabled;
+    if (newProjectBtn) newProjectBtn.disabled = disabled;
+    if (logoutBtn) logoutBtn.disabled = disabled;
+    const projectButtons = projectListEl?.querySelectorAll('button') || [];
+    projectButtons.forEach((btn) => {
+      btn.disabled = disabled;
+    });
+  }
+
   function showStatus(message, isError) {
     if (!editorStatusEl) return;
     editorStatusEl.textContent = message;
@@ -132,10 +144,10 @@
       const isSelected = (!currentIcon && val === '') || (currentIcon && val === currentIcon);
       if (isSelected) {
         btn.className =
-          'flex flex-col items-center justify-center p-2 border border-primary-container bg-primary-container/20 text-primary-container ring-1 ring-primary-container cursor-pointer transition-all';
+          'flex flex-col items-center justify-center p-2 border border-primary-container bg-primary-container/20 text-primary-container ring-1 ring-primary-container cursor-pointer transition-all focus:outline-none focus:ring-1 focus:ring-primary-container';
       } else {
         btn.className =
-          'flex flex-col items-center justify-center p-2 border border-outline-variant/30 bg-surface/40 text-on-surface-variant hover:border-outline-variant/80 hover:text-white cursor-pointer transition-all';
+          'flex flex-col items-center justify-center p-2 border border-outline-variant/30 bg-surface/40 text-on-surface-variant hover:border-outline-variant/80 hover:text-white cursor-pointer transition-all focus:outline-none focus:ring-1 focus:ring-primary-container';
       }
     });
   }
@@ -153,6 +165,7 @@
       <span class="text-[9px] font-mono uppercase tracking-tighter mt-1 truncate w-full text-center">Auto</span>
     `;
     onAction(autoBtn, () => {
+      if (inFlight) return;
       currentIcon = null;
       updateIconSelector();
     });
@@ -168,6 +181,7 @@
         <span class="text-[9px] font-mono uppercase tracking-tighter mt-1 truncate w-full text-center">${escapeHtml(iconName)}</span>
       `;
       onAction(btn, () => {
+        if (inFlight) return;
         currentIcon = iconName;
         updateIconSelector();
       });
@@ -180,6 +194,10 @@
   function renderProjectList() {
     if (!projectListEl || !projectCountEl) return;
     projectCountEl.textContent = String(projects.length);
+
+    const activeEl = document.activeElement;
+    const focusedId = activeEl && projectListEl.contains(activeEl) ? activeEl.dataset.projectId : null;
+
     projectListEl.innerHTML = '';
 
     if (projects.length === 0) {
@@ -193,11 +211,16 @@
 
     projects.forEach((proj) => {
       const isSelected = proj.id === currentProjectId;
-      const item = document.createElement('div');
+      const item = document.createElement('button');
+      item.type = 'button';
       item.dataset.projectId = String(proj.id);
       item.className = isSelected
-        ? 'p-3 border border-primary-container bg-surface-container-high transition-all cursor-pointer'
-        : 'p-3 border border-outline-variant/30 bg-surface/50 hover:border-outline-variant/70 hover:bg-surface transition-all cursor-pointer';
+        ? 'w-full text-left p-3 border border-primary-container bg-surface-container-high transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary-container disabled:opacity-50 disabled:cursor-not-allowed'
+        : 'w-full text-left p-3 border border-outline-variant/30 bg-surface/50 hover:border-outline-variant/70 hover:bg-surface transition-all cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary-container disabled:opacity-50 disabled:cursor-not-allowed';
+
+      if (inFlight) {
+        item.disabled = true;
+      }
 
       const iconName = proj.icon || 'terminal';
       const statusBadge = proj.isHidden
@@ -217,14 +240,24 @@
       `;
 
       onAction(item, () => {
-        selectProject(proj.id);
+        if (!inFlight) {
+          selectProject(proj.id);
+        }
       });
 
       projectListEl.appendChild(item);
     });
+
+    if (focusedId) {
+      const btnToFocus = projectListEl.querySelector(`button[data-project-id="${focusedId}"]`);
+      if (btnToFocus) {
+        btnToFocus.focus();
+      }
+    }
   }
 
   function selectProject(id) {
+    if (inFlight) return;
     const proj = projects.find((p) => p.id === id);
     if (!proj) {
       selectNewProject();
@@ -260,6 +293,7 @@
   }
 
   function selectNewProject() {
+    if (inFlight) return;
     currentProjectId = null;
     currentIcon = null;
     currentImage = '';
@@ -291,6 +325,7 @@
 
   if (photoUploadTrigger && photoInput) {
     onAction(photoUploadTrigger, () => {
+      if (inFlight) return;
       photoInput.click();
     });
 
@@ -322,6 +357,7 @@
 
   if (photoRemoveTrigger) {
     onAction(photoRemoveTrigger, () => {
+      if (inFlight) return;
       currentImage = '';
       updatePhotoPreview();
       if (photoInput) photoInput.value = '';
@@ -334,6 +370,7 @@
 
   async function handleSave() {
     if (inFlight) return;
+    const targetId = currentProjectId;
     const nameVal = formName ? formName.value.trim() : '';
     if (!nameVal) {
       showStatus('Project name is required', true);
@@ -358,11 +395,11 @@
     };
 
     inFlight = true;
-    if (saveBtn) saveBtn.disabled = true;
+    setDisabled(true);
     showStatus('Saving project to database…', false);
 
     try {
-      if (currentProjectId === null) {
+      if (targetId === null) {
         const res = await fetch('/api/projects', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -372,14 +409,17 @@
         if (res.status === 201) {
           const data = await res.json();
           projects.push(data.project);
-          selectProject(data.project.id);
+          renderProjectList();
+          if (currentProjectId === null) {
+            selectProject(data.project.id);
+          }
           showStatus(`Project created successfully (#${data.project.id})`, false);
         } else {
           const data = await res.json().catch(() => ({}));
           showStatus(data.error || 'Failed to create project', true);
         }
       } else {
-        const res = await fetch(`/api/projects/${currentProjectId}`, {
+        const res = await fetch(`/api/projects/${targetId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -387,22 +427,25 @@
 
         if (res.ok) {
           const data = await res.json();
-          const idx = projects.findIndex((p) => p.id === currentProjectId);
+          const idx = projects.findIndex((p) => p.id === targetId);
           if (idx !== -1) {
             projects[idx] = data.project;
           }
-          selectProject(data.project.id);
+          renderProjectList();
+          if (currentProjectId === targetId) {
+            selectProject(data.project.id);
+          }
           showStatus('Project saved successfully', false);
         } else {
           const data = await res.json().catch(() => ({}));
           showStatus(data.error || 'Failed to update project', true);
         }
       }
-    } catch (err) {
+    } catch (_err) {
       showStatus('Network error while saving project', true);
     } finally {
       inFlight = false;
-      if (saveBtn) saveBtn.disabled = false;
+      setDisabled(false);
     }
   }
 
@@ -412,6 +455,7 @@
 
   if (resetBtn) {
     onAction(resetBtn, () => {
+      if (inFlight) return;
       if (currentProjectId !== null) {
         selectProject(currentProjectId);
       } else {
@@ -421,33 +465,39 @@
   }
 
   async function handleDelete() {
-    if (inFlight || currentProjectId === null) return;
-    const proj = projects.find((p) => p.id === currentProjectId);
+    if (inFlight) return;
+    const targetId = currentProjectId;
+    if (targetId === null) return;
+    const proj = projects.find((p) => p.id === targetId);
     const confirmed = window.confirm(`Are you sure you want to permanently delete "${proj ? proj.name : 'this project'}"?`);
     if (!confirmed) return;
 
     inFlight = true;
-    if (deleteBtn) deleteBtn.disabled = true;
+    setDisabled(true);
     showStatus('Deleting project…', false);
 
     try {
-      const res = await fetch(`/api/projects/${currentProjectId}`, {
+      const res = await fetch(`/api/projects/${targetId}`, {
         method: 'DELETE',
       });
 
       if (res.status === 204) {
-        projects = projects.filter((p) => p.id !== currentProjectId);
-        selectNewProject();
+        projects = projects.filter((p) => p.id !== targetId);
+        if (currentProjectId === targetId) {
+          selectNewProject();
+        } else {
+          renderProjectList();
+        }
         showStatus('Project deleted successfully', false);
       } else {
         const data = await res.json().catch(() => ({}));
         showStatus(data.error || 'Failed to delete project', true);
       }
-    } catch (err) {
+    } catch (_err) {
       showStatus('Network error while deleting project', true);
     } finally {
       inFlight = false;
-      if (deleteBtn) deleteBtn.disabled = false;
+      setDisabled(false);
     }
   }
 
@@ -457,20 +507,32 @@
 
   if (newProjectBtn) {
     onAction(newProjectBtn, () => {
+      if (inFlight) return;
       selectNewProject();
     });
   }
 
   async function handleLogout() {
-    if (logoutBtn) logoutBtn.disabled = true;
+    if (inFlight) return;
+    inFlight = true;
+    setDisabled(true);
     try {
-      await fetch('/api/auth/logout', {
+      const res = await fetch('/api/auth/logout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: '{}',
       });
+      if (res.ok) {
+        window.location.reload();
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      showStatus(data.error || 'Failed to log out', true);
+    } catch (_err) {
+      showStatus('Network error while logging out', true);
     } finally {
-      window.location.reload();
+      inFlight = false;
+      setDisabled(false);
     }
   }
 
