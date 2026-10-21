@@ -85,8 +85,20 @@ describe('russian fragments', () => {
   test('serves Russian copy on the home page', async () => {
     const res = await renderPage('/', 'ru');
     const html = await (res as Response).text();
-    expect(html).toContain('Избранные работы');
+    expect(html).toContain('Окружение');
     expect(html).toContain('terminal-display');
+  });
+});
+
+describe('home page', () => {
+  test.each(['en', 'ru'] as const)('no longer renders the selected works section (%s)', async (lang) => {
+    const res = await renderPage('/', lang);
+    expect(res).not.toBeNull();
+    const html = await (res as Response).text();
+    expect(html).toContain('id="terminal-body"');
+    expect(html).not.toContain('id="projects"');
+    expect(html).not.toContain('/public/projects/telegram-bot.jpg');
+    expect(html).not.toContain('t.me/adhavenBot');
   });
 });
 
