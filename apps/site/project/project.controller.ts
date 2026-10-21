@@ -1,6 +1,8 @@
 import { canAccess, Injectable, type ProjectsRepository, resolveEmail } from '@bg/core';
 import { type Lang, resolveLang, t } from '../i18n';
 import { renderComponentTemplate, renderDocument } from '../site';
+import { cardColSpans } from './card-layout';
+import { extractStackTags } from './stack-tags';
 
 type ProjectRecord = Awaited<ReturnType<ProjectsRepository['list']>>[number];
 
@@ -20,15 +22,15 @@ function formatProjectDate(value: Date | null, lang: Lang) {
   }).format(value);
 }
 
-function stripHtml(value: string) {
-  return value
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 function serializeForScript(value: unknown) {
   return JSON.stringify(value).replaceAll('<', '\\u003c');
+}
+
+function getProjectIcon(name: string, description: string): string {
+  const text = `${name} ${description}`.toLowerCase();
+  if (/\bbot\b/.test(text)) return 'smart_toy';
+  if (/\bweb|\bsite\b|\bportfolio\b|\bblog\b/.test(text)) return 'web';
+  return 'terminal';
 }
 
 async function renderContentHtml(value: string | null) {
@@ -40,29 +42,79 @@ async function renderContentHtml(value: string | null) {
   return content;
 }
 
-async function renderProjectCard(project: ProjectRecord, index: number, lang: Lang) {
-  const accent = String(index + 1).padStart(2, '0');
-  const description = project.description?.trim() || t(lang, 'projectNoDescription');
-  const content = stripHtml(project.content?.trim() || t(lang, 'projectNoContent'));
-  const image = project.image?.trim();
-  const imageBlock = image
-    ? `<div class="border-b border-outline-variant/20 bg-surface overflow-hidden">
-      <img class="h-56 w-full object-cover" src="${escapeHtml(image)}" alt="${escapeHtml(project.name)} preview"/>
-    </div>`
-    : '';
+function renderPhotoTags(tags: string[]) {
+  if (tags.length === 0) {
+    return '';
+  }
+
+  const chips = tags
+    .map((tag, index) => {
+      const escapedTag = escapeHtml(tag);
+      if (index === 0) {
+        return `<span class="px-2 py-1 bg-primary-container text-on-primary-container text-[10px] font-mono font-bold uppercase">${escapedTag}</span>`;
+      }
+      return `<span class="px-2 py-1 bg-white/10 text-white text-[10px] font-mono font-bold uppercase backdrop-blur-md border border-white/10">${escapedTag}</span>`;
+    })
+    .join('');
+
+  return `<div class="flex flex-wrap gap-2 mb-4">${chips}</div>`;
+}
+
+function renderPlainTags(tags: string[]) {
+  if (tags.length === 0) {
+    return '';
+  }
+
+  const chips = tags
+    .map((tag) => {
+      return `<span class="text-[9px] font-mono font-bold border border-outline-variant/60 bg-surface/40 px-2 py-1 text-on-surface-variant uppercase">${escapeHtml(tag)}</span>`;
+    })
+    .join('');
+
+  return `<div class="flex flex-wrap gap-2 pt-2">${chips}</div>`;
+}
+
+function renderHiddenBadge(isHidden: boolean, lang: Lang) {
+  if (!isHidden) {
+    return '';
+  }
+
+  return `<span class="inline-flex items-center px-2 py-0.5 bg-secondary/10 text-secondary border border-secondary/30 text-[10px] font-mono font-bold uppercase tracking-wider">${escapeHtml(t(lang, 'visibilityHidden'))}</span>`;
+}
+
+async function renderProjectCard(project: ProjectRecord, index: number, total: number, lang: Lang) {
+  const colSpan = cardColSpans(total)[index] ?? 12;
+  const colSpanClass = `md:col-span-${colSpan}`;
   const name = escapeHtml(project.name);
-  const projectPath = escapeHtml(project.name.toLowerCase().replaceAll(/\s+/g, '-'));
-  const visibility = project.isHidden ? t(lang, 'visibilityHidden') : t(lang, 'visibilityPublished');
-  return renderComponentTemplate('project-card.html', {
-    accent,
-    content: escapeHtml(content),
-    createdAt: escapeHtml(formatProjectDate(project.createdAt, lang)),
-    description: escapeHtml(description),
-    imageBlock,
+  const description = escapeHtml(project.description?.trim() || t(lang, 'projectNoDescription'));
+  const image = project.image?.trim();
+  const viewProjectText = escapeHtml(t(lang, 'viewProject'));
+  const tags = extractStackTags(project.content);
+  const hiddenBadge = renderHiddenBadge(project.isHidden, lang);
+  const isWide = colSpan === 12;
+
+  if (image) {
+    return renderComponentTemplate(isWide ? 'projects/card-photo-wide.html' : 'projects/card-photo.html', {
+      colSpanClass,
+      description,
+      hiddenBadge,
+      image: escapeHtml(image),
+      name,
+      projectHref: `/projects/${project.id}`,
+      tagsHtml: renderPhotoTags(tags),
+      viewProjectText,
+    });
+  }
+
+  return renderComponentTemplate(isWide ? 'projects/card-plain-wide.html' : 'projects/card-plain.html', {
+    colSpanClass,
+    description,
+    hiddenBadge,
+    icon: escapeHtml(getProjectIcon(project.name, project.description ?? '')),
+    name,
     projectHref: `/projects/${project.id}`,
-    projectName: name,
-    projectPath,
-    visibility: escapeHtml(visibility),
+    tagsHtml: renderPlainTags(tags),
+    viewProjectText,
   });
 }
 
@@ -71,7 +123,7 @@ async function renderProjectsFragment(projects: ProjectRecord[], lang: Lang) {
     return renderComponentTemplate('projects/empty-state.html');
   }
 
-  return (await Promise.all(projects.map((project, index) => renderProjectCard(project, index, lang)))).join('');
+  return (await Promise.all(projects.map((project, index) => renderProjectCard(project, index, projects.length, lang)))).join('');
 }
 
 async function renderProjectEditor() {

@@ -1,0 +1,33 @@
+<a
+  href="{{ projectHref }}"
+  class="{{ colSpanClass }} group relative overflow-hidden bg-surface-container-high border border-outline-variant/50 hover:border-primary-container/50 transition-all flex flex-col justify-between h-full">
+  <div class="relative z-20 p-7 md:p-8 flex flex-col justify-between h-full min-h-[360px]">
+    <div>
+      <div class="flex items-start justify-between gap-4 mb-6">
+        <div
+          class="w-12 h-12 bg-primary-container/10 flex items-center justify-center border border-primary-container/30 group-hover:border-primary-container group-hover:bg-primary-container/20 transition-colors">
+          <span class="material-symbols-outlined text-primary-container text-2xl" aria-hidden="true">{{ icon }}</span>
+        </div>
+        {{ hiddenBadge }}
+      </div>
+      <div class="space-y-4">
+        <div>
+          <h2
+            class="text-xl md:text-2xl font-headline font-bold text-white uppercase group-hover:text-primary-container transition-colors tracking-tight mb-2">
+            {{ name }}
+          </h2>
+          <p class="text-sm text-on-surface-variant font-body font-medium leading-relaxed line-clamp-3">{{ description }}</p>
+        </div>
+        {{ tagsHtml }}
+      </div>
+    </div>
+    <div class="pt-6 mt-6 border-t border-outline-variant/30 flex items-center justify-between">
+      <span class="inline-flex items-center text-primary-container font-mono text-xs uppercase font-bold gap-1.5">
+        {{ viewProjectText }}
+        <span class="material-symbols-outlined text-sm group-hover:translate-x-1 transition-transform" aria-hidden="true">
+          arrow_forward
+        </span>
+      </span>
+    </div>
+  </div>
+</a>
