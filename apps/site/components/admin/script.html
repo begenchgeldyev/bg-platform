@@ -257,7 +257,6 @@
   }
 
   function selectProject(id) {
-    if (inFlight) return;
     const proj = projects.find((p) => p.id === id);
     if (!proj) {
       selectNewProject();
@@ -293,7 +292,6 @@
   }
 
   function selectNewProject() {
-    if (inFlight) return;
     currentProjectId = null;
     currentIcon = null;
     currentImage = '';
@@ -409,9 +407,12 @@
         if (res.status === 201) {
           const data = await res.json();
           projects.push(data.project);
-          renderProjectList();
+          inFlight = false;
+          setDisabled(false);
           if (currentProjectId === null) {
             selectProject(data.project.id);
+          } else {
+            renderProjectList();
           }
           showStatus(`Project created successfully (#${data.project.id})`, false);
         } else {
@@ -431,9 +432,12 @@
           if (idx !== -1) {
             projects[idx] = data.project;
           }
-          renderProjectList();
+          inFlight = false;
+          setDisabled(false);
           if (currentProjectId === targetId) {
             selectProject(data.project.id);
+          } else {
+            renderProjectList();
           }
           showStatus('Project saved successfully', false);
         } else {
@@ -483,6 +487,8 @@
 
       if (res.status === 204) {
         projects = projects.filter((p) => p.id !== targetId);
+        inFlight = false;
+        setDisabled(false);
         if (currentProjectId === targetId) {
           selectNewProject();
         } else {
