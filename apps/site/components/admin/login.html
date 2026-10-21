@@ -116,6 +116,13 @@
         handleLogin();
       }
     });
+    // Keyboard and assistive activations only send a click (detail 0); the form's submit
+    // handler owns pointer presses, so stop the native submit here and run the action once.
+    submitBtn.addEventListener('click', (e) => {
+      if (e.detail !== 0) return;
+      e.preventDefault();
+      handleLogin();
+    });
   }
 })();
 </script>

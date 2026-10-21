@@ -10,6 +10,10 @@
       .replaceAll("'", '&#39;');
   }
 
+  // CLAUDE.md keeps pointer presses on mousedown. Native buttons still fire a click for
+  // Enter, Space, screen readers and synthetic activations; those report detail 0, while
+  // the click produced by a pointer press reports a click count of 1 or more. Handling
+  // only detail 0 skips the click that follows a mousedown, so nothing runs twice.
   function onAction(el, handler) {
     if (!el) return;
     el.addEventListener('mousedown', (e) => {
@@ -18,9 +22,8 @@
         handler(e);
       }
     });
-    el.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
+    el.addEventListener('click', (e) => {
+      if (e.detail === 0) {
         handler(e);
       }
     });

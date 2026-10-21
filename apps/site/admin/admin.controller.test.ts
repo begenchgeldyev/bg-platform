@@ -37,6 +37,14 @@ function createController(options: { projects?: Project[]; email?: string | null
   });
 }
 
+function scriptSection(html: string, start: string, end: string): string {
+  const from = html.indexOf(start);
+  expect(from).toBeGreaterThan(-1);
+  const to = html.indexOf(end, from);
+  expect(to).toBeGreaterThan(from);
+  return html.slice(from, to);
+}
+
 describe('AdminController', () => {
   test('shows the login form without a session', async () => {
     const controller = createController({
@@ -98,6 +106,40 @@ describe('AdminController', () => {
     const response = await controller.page(new Request('http://localhost/admin'));
     const html = await response.text();
     expect(html).not.toContain('</script><img');
+  });
+
+  test('button actions keep mousedown and add click for keyboard and assistive activation', async () => {
+    const controller = createController({
+      projects: [project({ name: 'Demo' })],
+      email: 'begenchgeldyev@gmail.com',
+      canEdit: true,
+    });
+    const html = await (await controller.page(new Request('http://localhost/admin'))).text();
+    const onAction = scriptSection(html, 'function onAction', 'const projectsDataEl');
+
+    expect(onAction).toContain("addEventListener('mousedown'");
+    expect(onAction).toContain("addEventListener('click'");
+    expect(onAction).not.toContain("addEventListener('keydown'");
+  });
+
+  test('the login button also answers keyboard and assistive clicks', async () => {
+    const controller = createController({ email: null, canEdit: false });
+    const html = await (await controller.page(new Request('http://localhost/admin'))).text();
+    const loginScript = scriptSection(html, 'const form = document.querySelector', '})();');
+
+    expect(loginScript).toContain("addEventListener('mousedown'");
+    expect(loginScript).toContain("addEventListener('click'");
+    expect(loginScript).not.toContain("addEventListener('keydown'");
+  });
+
+  test('the logout button on the restricted page answers keyboard and assistive clicks', async () => {
+    const controller = createController({ email: 'viewer@example.com', canEdit: false });
+    const html = await (await controller.page(new Request('http://localhost/admin'))).text();
+    const logoutScript = scriptSection(html, 'const btn = document.getElementById', '})();');
+
+    expect(logoutScript).toContain("addEventListener('mousedown'");
+    expect(logoutScript).toContain("addEventListener('click'");
+    expect(logoutScript).not.toContain("addEventListener('keydown'");
   });
 
   test('renders in English even when the request has a Russian lang cookie', async () => {

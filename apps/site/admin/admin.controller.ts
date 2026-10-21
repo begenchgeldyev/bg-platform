@@ -73,9 +73,10 @@ function renderUnauthorized(): string {
         doLogout();
       }
     });
-    btn.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
+    // Native buttons fire a click (detail 0) for Enter, Space, screen readers and
+    // synthetic activations; the pointer click reports a click count, so skip it.
+    btn.addEventListener('click', (e) => {
+      if (e.detail === 0) {
         doLogout();
       }
     });
