@@ -101,3 +101,56 @@ describe('isHidden', () => {
     expect(parseProjectChanges({ isHidden: 'yes' })).toEqual({ ok: false, error: 'isHidden must be true or false' });
   });
 });
+
+describe('text caps', () => {
+  test('counts trailing whitespace against the description cap', () => {
+    expect(parseProjectChanges({ description: `${'a'.repeat(600)} ` })).toEqual({ ok: false, error: 'description is too long' });
+  });
+
+  test('counts trailing whitespace against the content cap', () => {
+    expect(parseProjectChanges({ content: `${'a'.repeat(100_000)} ` })).toEqual({ ok: false, error: 'content is too long' });
+  });
+
+  test('keeps whitespace-only text as null', () => {
+    expect(parseProjectChanges({ content: '   \n  ' })).toEqual({ ok: true, value: { content: null } });
+  });
+});
+
+describe('photo paths', () => {
+  test('refuses an encoded traversal', () => {
+    expect(parseProjectChanges({ image: '/public/%2e%2e/server.ts' })).toEqual({ ok: false, error: 'photo must be an uploaded image' });
+    expect(parseProjectChanges({ image: '/public/%2E%2E/server.ts' })).toEqual({ ok: false, error: 'photo must be an uploaded image' });
+  });
+
+  test('refuses a traversal that is encoded twice', () => {
+    expect(parseProjectChanges({ image: '/public/%252e%252e/server.ts' })).toEqual({ ok: false, error: 'photo must be an uploaded image' });
+  });
+
+  test('refuses an encoded traversal with an encoded slash', () => {
+    expect(parseProjectChanges({ image: '/public/..%2Fserver.ts' })).toEqual({ ok: false, error: 'photo must be an uploaded image' });
+  });
+
+  test('refuses a payload that is not real base64', () => {
+    for (const payload of ['A', '=', 'A==', 'AAAA=']) {
+      expect(parseProjectChanges({ image: `data:image/png;base64,${payload}` })).toEqual({
+        ok: false,
+        error: 'photo must be an uploaded image',
+      });
+    }
+  });
+});
+
+describe('body shape', () => {
+  test('refuses a date instead of a JSON object', () => {
+    expect(parseNewProject(new Date())).toEqual({ ok: false, error: 'body must be a JSON object' });
+  });
+
+  test('refuses an object with a custom prototype', () => {
+    const inherited = Object.create({ name: 'Demo' }) as Record<string, unknown>;
+    expect(parseProjectChanges(inherited)).toEqual({ ok: false, error: 'body must be a JSON object' });
+  });
+
+  test('refuses an array', () => {
+    expect(parseNewProject([])).toEqual({ ok: false, error: 'body must be a JSON object' });
+  });
+});

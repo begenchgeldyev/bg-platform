@@ -16,7 +16,13 @@ export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string
 const DATA_IMAGE = /^data:image\/(?:png|jpeg|webp|gif);base64,([A-Za-z0-9+/]*={0,2})$/;
 
 function asRecord(body: unknown): Record<string, unknown> | null {
-  return typeof body === 'object' && body !== null && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return null;
+  const prototype = Object.getPrototypeOf(body);
+  return prototype === Object.prototype || prototype === null ? (body as Record<string, unknown>) : null;
+}
+
+function read(record: Record<string, unknown>, key: string): unknown {
+  return Object.hasOwn(record, key) ? record[key] : undefined;
 }
 
 function parseName(value: unknown): ParseResult<string> {
@@ -29,8 +35,30 @@ function parseName(value: unknown): ParseResult<string> {
 function parseText(value: unknown, field: 'description' | 'content', maxChars: number): ParseResult<string | null> {
   if (value === undefined || value === null) return { ok: true, value: null };
   if (typeof value !== 'string') return { ok: false, error: `${field} must be text` };
-  if (value.trim().length > maxChars) return { ok: false, error: `${field} is too long` };
-  return { ok: true, value: value.trim() === '' ? null : value };
+  if (value.trim() === '') return { ok: true, value: null };
+  if (value.length > maxChars) return { ok: false, error: `${field} is too long` };
+  return { ok: true, value };
+}
+
+// Decode until the path stops changing, so once- and twice-encoded dot segments both surface.
+function decodePath(image: string): string | null {
+  let path = image;
+  for (;;) {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(path);
+    } catch {
+      return null;
+    }
+    if (decoded === path) return path;
+    path = decoded;
+  }
+}
+
+function isPublicImagePath(image: string): boolean {
+  const path = decodePath(image);
+  if (path === null) return false;
+  return path.startsWith('/public/') && !path.includes('\\') && !path.split('/').includes('..');
 }
 
 function parseImage(value: unknown): ParseResult<string | null> {
@@ -39,12 +67,14 @@ function parseImage(value: unknown): ParseResult<string | null> {
 
   const image = value.trim();
   if (!image) return { ok: true, value: null };
-  if (image.startsWith('/public/') && !image.includes('..')) return { ok: true, value: image };
+  if (isPublicImagePath(image)) return { ok: true, value: image };
 
   const dataUrl = DATA_IMAGE.exec(image);
   if (!dataUrl) return { ok: false, error: 'photo must be an uploaded image' };
 
   const payload = dataUrl[1] ?? '';
+  if (payload.length === 0 || payload.length % 4 !== 0) return { ok: false, error: 'photo must be an uploaded image' };
+
   const padding = payload.endsWith('==') ? 2 : payload.endsWith('=') ? 1 : 0;
   const bytes = Math.floor((payload.length * 3) / 4) - padding;
   if (bytes > PROJECT_LIMITS.maxImageBytes) return { ok: false, error: 'photo must be 2 MB or smaller' };
@@ -87,19 +117,19 @@ export function parseNewProject(body: unknown): ParseResult<ProjectInput> {
   const record = asRecord(body);
   if (!record) return { ok: false, error: 'body must be a JSON object' };
 
-  const name = parseName(record.name);
+  const name = parseName(read(record, 'name'));
   if (!name.ok) return name;
-  const description = parseText(record.description, 'description', PROJECT_LIMITS.maxDescriptionChars);
+  const description = parseText(read(record, 'description'), 'description', PROJECT_LIMITS.maxDescriptionChars);
   if (!description.ok) return description;
-  const content = parseText(record.content, 'content', PROJECT_LIMITS.maxContentChars);
+  const content = parseText(read(record, 'content'), 'content', PROJECT_LIMITS.maxContentChars);
   if (!content.ok) return content;
-  const image = parseImage(record.image);
+  const image = parseImage(read(record, 'image'));
   if (!image.ok) return image;
-  const icon = parseIcon(record.icon);
+  const icon = parseIcon(read(record, 'icon'));
   if (!icon.ok) return icon;
-  const tags = parseTags(record.tags);
+  const tags = parseTags(read(record, 'tags'));
   if (!tags.ok) return tags;
-  const isHidden = parseIsHidden(record.isHidden);
+  const isHidden = parseIsHidden(read(record, 'isHidden'));
   if (!isHidden.ok) return isHidden;
 
   return {
@@ -122,44 +152,44 @@ export function parseProjectChanges(body: unknown): ParseResult<Partial<ProjectI
 
   const changes: Partial<ProjectInput> = {};
 
-  if (record.name !== undefined) {
-    const name = parseName(record.name);
+  if (Object.hasOwn(record, 'name')) {
+    const name = parseName(read(record, 'name'));
     if (!name.ok) return name;
     changes.name = name.value;
   }
 
-  if (record.description !== undefined) {
-    const description = parseText(record.description, 'description', PROJECT_LIMITS.maxDescriptionChars);
+  if (Object.hasOwn(record, 'description')) {
+    const description = parseText(read(record, 'description'), 'description', PROJECT_LIMITS.maxDescriptionChars);
     if (!description.ok) return description;
     changes.description = description.value;
   }
 
-  if (record.content !== undefined) {
-    const content = parseText(record.content, 'content', PROJECT_LIMITS.maxContentChars);
+  if (Object.hasOwn(record, 'content')) {
+    const content = parseText(read(record, 'content'), 'content', PROJECT_LIMITS.maxContentChars);
     if (!content.ok) return content;
     changes.content = content.value;
   }
 
-  if (record.image !== undefined) {
-    const image = parseImage(record.image);
+  if (Object.hasOwn(record, 'image')) {
+    const image = parseImage(read(record, 'image'));
     if (!image.ok) return image;
     changes.image = image.value;
   }
 
-  if (record.icon !== undefined) {
-    const icon = parseIcon(record.icon);
+  if (Object.hasOwn(record, 'icon')) {
+    const icon = parseIcon(read(record, 'icon'));
     if (!icon.ok) return icon;
     changes.icon = icon.value;
   }
 
-  if (record.tags !== undefined) {
-    const tags = parseTags(record.tags);
+  if (Object.hasOwn(record, 'tags')) {
+    const tags = parseTags(read(record, 'tags'));
     if (!tags.ok) return tags;
     changes.tags = tags.value;
   }
 
-  if (record.isHidden !== undefined) {
-    const isHidden = parseIsHidden(record.isHidden);
+  if (Object.hasOwn(record, 'isHidden')) {
+    const isHidden = parseIsHidden(read(record, 'isHidden'));
     if (!isHidden.ok) return isHidden;
     changes.isHidden = isHidden.value;
   }
