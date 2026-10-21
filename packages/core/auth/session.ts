@@ -23,6 +23,8 @@ export function isValidSessionToken(token: string, secret: string | undefined, n
   const expiresAtMs = Number(expiresAt);
   if (!Number.isSafeInteger(expiresAtMs) || expiresAtMs <= now) return false;
 
+  if (!/^[0-9a-f]{64}$/i.test(signature)) return false;
+
   const expected = Buffer.from(sign(secret, expiresAtMs), 'hex');
   const actual = Buffer.from(signature, 'hex');
   if (actual.length !== expected.length) return false;

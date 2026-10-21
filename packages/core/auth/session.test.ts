@@ -21,6 +21,13 @@ describe('isValidSessionToken', () => {
     expect(isValidSessionToken(`${token.slice(0, -1)}${last}`, 's3cret', 2000)).toBe(false);
   });
 
+  test('rejects a signature with garbage appended', () => {
+    const token = createSessionToken('s3cret', 1000);
+    for (const suffix of ['g', '0', 'zzgarbage']) {
+      expect(isValidSessionToken(`${token}${suffix}`, 's3cret', 2000)).toBe(false);
+    }
+  });
+
   test('rejects a token signed with another secret', () => {
     expect(isValidSessionToken(createSessionToken('other', 1000), 's3cret', 2000)).toBe(false);
   });
