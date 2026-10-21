@@ -143,6 +143,16 @@ describe('ProjectController.getPageById', () => {
     expect(response.status).toBe(404);
   });
 
+  test('escapes the project name in the page title', async () => {
+    const name = '</title><script>alert(1)</script>';
+    const subject = controller({ projects: [project({ id: 1, name })], canEdit: false });
+    const html = await (await subject.controller.getPageById(new Request('http://localhost/projects/1'), 1)).text();
+
+    expect(html).toContain('&lt;/TITLE&gt;&lt;SCRIPT&gt;ALERT(1)&lt;/SCRIPT&gt;');
+    expect(html).not.toContain('</TITLE><SCRIPT>');
+    expect(html).not.toContain('<SCRIPT>ALERT');
+  });
+
   test('renders tag chips when project has tags, and nothing when empty', async () => {
     const withTags = controller({
       projects: [project({ id: 1, tags: ['TypeScript', 'Bun'] })],

@@ -195,7 +195,7 @@ async function renderProjectPage(req: Request, project: ProjectRecord, canEdit: 
     visibility: escapeHtml(visibility),
   });
 
-  const projectTitle = `${project.name.toUpperCase()} — BEGENCH_GELDYEV@ROOT:~$`;
+  const projectTitle = `${escapeHtml(project.name.toUpperCase())} — BEGENCH_GELDYEV@ROOT:~$`;
 
   return new Response(
     await renderDocument(
