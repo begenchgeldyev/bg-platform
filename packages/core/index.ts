@@ -4,4 +4,4 @@ export { getPolicies, getSubjectAttributes } from './abac/pip';
 export * from './auth/session';
 export * from './DIContainer';
 export * from './db';
-export { ProjectsRepository } from './project/project.repository';
+export { type ProjectInput, ProjectsRepository } from './project/project.repository';

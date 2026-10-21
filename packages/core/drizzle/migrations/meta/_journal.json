@@ -8,6 +8,20 @@
       "when": 1778350491032,
       "tag": "0000_windy_talos",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792580998694,
+      "tag": "0001_melted_colleen_wing",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792581000626,
+      "tag": "0002_move_stack_lines_to_tags",
+      "breakpoints": true
     }
   ]
 }

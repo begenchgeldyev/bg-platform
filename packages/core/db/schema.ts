@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import { boolean, jsonb, pgEnum, pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core';
 
 export const projects = pgTable('projects', {
@@ -7,6 +8,8 @@ export const projects = pgTable('projects', {
   content: text('content'),
   image: text('image'),
   isHidden: boolean('is_hidden').notNull().default(false),
+  icon: text('icon'),
+  tags: text('tags').array().notNull().default(sql`'{}'::text[]`),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

@@ -33,18 +33,21 @@ const seedProjects = [
   The project is structured around three main components. First, lexical analysis scans the input source and converts it into tokens. Second, syntactic analysis validates the token sequence using the LL(1) parsing technique. During parsing, the interpreter also generates Reverse Polish Notation, which acts as an intermediate representation of the program. Finally, the RPN executor evaluates the generated instructions and handles computation and control flow according to the language semantics.
   The repository also includes a theory directory with formal grammar materials, including BNF definitions, transition tables, rule-generation tables, and RPN-generation tables. A tests directory demonstrates the capabilities of the custom language.
   This project helped me better understand how programming languages work internally, including tokenization, parsing, intermediate representation generation, and execution.`,
+    tags: [],
   },
   {
     name: 'This Website',
     description: 'Personal portfolio & blog. Built with HTMX, Tailwind CSS, and a Bun server.',
-    content: '<p>Stack: HTMX, Tailwind CSS, Bun.</p>',
+    content: null,
+    tags: ['HTMX', 'Tailwind CSS', 'Bun'],
   },
   {
     name: 'Telegram Bot',
     description: 'Bot for connecting advertisers and influencers. Built with python-telegram-bot, MongoDB, and deployed on Yandex Cloud.',
     image: '/public/projects/telegram-bot.jpg',
     content:
-      '<p>Stack: Python, MongoDB, Telegram API.</p><p>Open the bot in Telegram: <a href="https://t.me/adhavenBot" target="_blank" rel="noopener noreferrer">t.me/adhavenBot</a></p>',
+      '<p>Open the bot in Telegram: <a href="https://t.me/adhavenBot" target="_blank" rel="noopener noreferrer">t.me/adhavenBot</a></p>',
+    tags: ['Python', 'MongoDB', 'Telegram API'],
   },
 ];
 

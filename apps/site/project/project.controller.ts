@@ -251,7 +251,7 @@ export class ProjectController {
   constructor(private readonly projectsRepository: ProjectsRepository) {}
 
   async get(req: Request) {
-    const items = await this.projectsRepository.list();
+    const items = await this.projectsRepository.list({ includeHidden: true });
     if (req.headers.get('HX-Request') === 'true') {
       return new Response(await renderProjectsFragment(items, resolveLang(req)), {
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -267,8 +267,10 @@ export class ProjectController {
       return parsed.error;
     }
 
-    const [created] = await this.projectsRepository.create({
+    const created = await this.projectsRepository.create({
       ...parsed.value,
+      icon: null,
+      tags: [],
     });
 
     return Response.json({ project: created }, { status: 201 });
@@ -280,7 +282,7 @@ export class ProjectController {
       return parsed.error;
     }
 
-    const [updated] = await this.projectsRepository.updateById(id, parsed.value);
+    const updated = await this.projectsRepository.updateById(id, parsed.value);
     if (!updated) {
       return Response.json({ error: 'Project not found' }, { status: 404 });
     }
