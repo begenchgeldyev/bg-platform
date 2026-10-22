@@ -53,7 +53,7 @@ Cross-site and non-JSON guards are shared in `apps/site/http/requests.ts`; per-I
 
 ### Owner login and `/admin`
 
-`POST /api/auth/login` takes `{ secret }`, compares it to `ADMIN_SECRET`, and sets a signed `bg_session` cookie: HttpOnly, SameSite=Lax, 30 days, Secure in production. Login is rate-limited to 5 attempts per 15 minutes per IP; `POST /api/auth/logout` clears the cookie. Both require JSON. Session code is in `packages/core/auth/session.ts`; the endpoints are in `apps/site/auth/auth.controller.ts`.
+`POST /api/auth/login` takes `{ secret }`, compares it to `ADMIN_SECRET`, and sets a signed `bg_session` cookie: HttpOnly, SameSite=Lax, 30 days, Secure in production. `ADMIN_SECRET` is both the password and the session signing key, so it must be long and random; changing it logs every session out. Login is rate-limited to 5 attempts per 15 minutes per IP; `POST /api/auth/logout` clears the cookie. Both require JSON. Session code is in `packages/core/auth/session.ts`; the endpoints are in `apps/site/auth/auth.controller.ts`.
 
 `/admin` (`apps/site/admin/admin.controller.ts`, templates in `apps/site/components/admin/`) is English-only, sent with `no-store` and `noindex`, and shows a login form, an "account can't edit" note, or the editor.
 
