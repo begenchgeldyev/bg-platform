@@ -27,7 +27,7 @@ function renderUnauthorized(): string {
       <button
         id="admin-unauthorized-logout"
         type="button"
-        class="border border-outline-variant/60 bg-surface hover:border-primary-container hover:text-primary-container px-6 py-2.5 font-mono text-xs uppercase tracking-[0.2em] text-on-surface transition-colors cursor-pointer">
+        class="border border-outline-variant/60 bg-surface hover:border-outline hover:text-white px-6 py-2.5 font-mono text-xs uppercase tracking-[0.2em] text-on-surface transition-colors cursor-pointer">
         [LOG OUT]
       </button>
     </div>

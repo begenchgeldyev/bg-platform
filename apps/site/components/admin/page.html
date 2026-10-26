@@ -3,9 +3,9 @@
   <header
     class="border border-outline-variant/40 bg-surface-container-lowest/90 p-4 md:p-6 mb-8 flex flex-wrap items-center justify-between gap-4">
     <div class="flex items-center gap-3">
-      <div class="w-3 h-3 bg-primary-container rounded-full animate-pulse"></div>
+      <div class="w-2.5 h-2.5 bg-outline-variant rounded-full"></div>
       <div class="space-y-0.5">
-        <div class="font-mono text-xs uppercase tracking-[0.2em] text-primary-container flex items-center gap-2">
+        <div class="font-mono text-xs uppercase tracking-[0.2em] text-on-surface-variant flex items-center gap-2">
           <span>ROOT@BEGENCH_GELDYEV:~$</span>
           <span class="text-outline-variant font-normal">PROJECT_ADMIN</span>
         </div>
@@ -37,7 +37,7 @@
       <div class="border border-outline-variant/40 bg-surface-container-lowest/80 p-5 space-y-4">
         <div class="flex items-center justify-between gap-2 pb-3 border-b border-outline-variant/30">
           <div class="flex items-center gap-2">
-            <span class="font-mono text-xs uppercase tracking-[0.2em] text-primary-container font-bold">[PROJECTS]</span>
+            <span class="font-mono text-xs uppercase tracking-[0.2em] text-on-surface-variant font-bold">[PROJECTS]</span>
             <span
               id="admin-project-count"
               class="font-mono text-[10px] bg-surface-container-high border border-outline-variant/40 px-1.5 py-0.5 text-on-surface-variant rounded">
@@ -47,7 +47,7 @@
           <button
             id="admin-new-project-btn"
             type="button"
-            class="border border-primary-container bg-primary-container/10 text-primary-container hover:bg-primary-container hover:text-on-primary-container px-3 py-1 font-mono text-xs uppercase font-bold tracking-wider transition-all cursor-pointer flex items-center gap-1">
+            class="border border-outline-variant/60 bg-surface/50 text-on-surface-variant hover:border-outline hover:text-white hover:bg-surface-container-high px-3 py-1 font-mono text-xs uppercase font-bold tracking-wider transition-all cursor-pointer flex items-center gap-1">
             <span class="material-symbols-outlined text-sm" aria-hidden="true">add</span>
             <span>New Project</span>
           </button>
@@ -66,7 +66,7 @@
         <!-- Editor Header -->
         <div class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-outline-variant/30">
           <div class="flex items-center gap-3">
-            <span id="admin-editor-mode-badge" class="font-mono text-xs uppercase tracking-[0.2em] text-primary-container font-bold">
+            <span id="admin-editor-mode-badge" class="font-mono text-xs uppercase tracking-[0.2em] text-on-surface-variant font-bold">
               [MODE: NEW PROJECT]
             </span>
           </div>
@@ -75,7 +75,7 @@
               id="admin-view-live-link"
               href="#"
               target="_blank"
-              class="hidden font-mono text-xs text-primary-container hover:underline uppercase tracking-wider flex items-center gap-1">
+              class="hidden font-mono text-xs text-on-surface-variant hover:text-white hover:underline uppercase tracking-wider flex items-center gap-1">
               <span>View live</span>
               <span class="material-symbols-outlined text-sm" aria-hidden="true">open_in_new</span>
             </a>
@@ -90,7 +90,7 @@
           <!-- Name & Visibility -->
           <div class="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
             <div class="md:col-span-8 space-y-2">
-              <label for="admin-form-name" class="block font-mono text-[11px] uppercase tracking-[0.18em] text-primary-container">
+              <label for="admin-form-name" class="block font-mono text-[11px] uppercase tracking-[0.18em] text-on-surface-variant">
                 Project Name <span class="text-error">*</span>
               </label>
               <input
@@ -100,18 +100,18 @@
                 required
                 maxlength="{{ maxNameChars }}"
                 placeholder="e.g. Memory Interpreter"
-                class="w-full bg-[#050505] border border-outline-variant/50 focus:border-primary-container focus:ring-1 focus:ring-primary-container font-mono text-sm text-on-surface px-4 py-2.5 outline-none transition-all">
+                class="w-full bg-[#050505] border border-outline-variant/50 focus:border-outline focus:ring-1 focus:ring-outline/60 font-mono text-sm text-on-surface px-4 py-2.5 outline-none transition-all">
             </div>
 
             <div class="md:col-span-4 space-y-2">
-              <label class="block font-mono text-[11px] uppercase tracking-[0.18em] text-outline">Visibility</label>
+              <label class="block font-mono text-[11px] uppercase tracking-[0.18em] text-on-surface-variant">Visibility</label>
               <div class="pt-2">
                 <label class="inline-flex items-center gap-2.5 cursor-pointer font-mono text-xs text-on-surface select-none">
                   <input
                     id="admin-form-hidden"
                     name="isHidden"
                     type="checkbox"
-                    class="w-4 h-4 rounded bg-[#050505] border-outline-variant text-primary-container focus:ring-primary-container">
+                    class="w-4 h-4 rounded bg-[#050505] border-outline-variant text-outline focus:ring-outline/60">
                   <span id="admin-hidden-label">Hide project</span>
                 </label>
               </div>
@@ -121,7 +121,7 @@
           <!-- Description -->
           <div class="space-y-2">
             <div class="flex items-center justify-between">
-              <label for="admin-form-description" class="block font-mono text-[11px] uppercase tracking-[0.18em] text-primary-container">
+              <label for="admin-form-description" class="block font-mono text-[11px] uppercase tracking-[0.18em] text-on-surface-variant">
                 Description (Card Summary)
               </label>
               <span class="font-mono text-[10px] text-outline-variant">Max {{ maxDescriptionChars }} chars</span>
@@ -132,13 +132,13 @@
               rows="3"
               maxlength="{{ maxDescriptionChars }}"
               placeholder="Short summary displayed on project cards and page hero..."
-              class="w-full bg-[#050505] border border-outline-variant/50 focus:border-primary-container focus:ring-1 focus:ring-primary-container font-mono text-sm text-on-surface p-3 outline-none transition-all leading-relaxed"></textarea>
+              class="w-full bg-[#050505] border border-outline-variant/50 focus:border-outline focus:ring-1 focus:ring-outline/60 font-mono text-sm text-on-surface p-3 outline-none transition-all leading-relaxed"></textarea>
           </div>
 
           <!-- Tags -->
           <div class="space-y-2">
             <div class="flex items-center justify-between">
-              <label for="admin-form-tags" class="block font-mono text-[11px] uppercase tracking-[0.18em] text-primary-container">
+              <label for="admin-form-tags" class="block font-mono text-[11px] uppercase tracking-[0.18em] text-on-surface-variant">
                 Tags (Comma-separated)
               </label>
               <span class="font-mono text-[10px] text-outline-variant">e.g. TypeScript, Bun, Drizzle</span>
@@ -148,7 +148,7 @@
               name="tags"
               type="text"
               placeholder="TypeScript, AST, Compiler, Rust"
-              class="w-full bg-[#050505] border border-outline-variant/50 focus:border-primary-container focus:ring-1 focus:ring-primary-container font-mono text-sm text-on-surface px-4 py-2.5 outline-none transition-all">
+              class="w-full bg-[#050505] border border-outline-variant/50 focus:border-outline focus:ring-1 focus:ring-outline/60 font-mono text-sm text-on-surface px-4 py-2.5 outline-none transition-all">
             <!-- Live Preview of Tags -->
             <div id="admin-tags-preview" class="flex flex-wrap gap-2 pt-1 min-h-[24px]"></div>
           </div>
@@ -156,8 +156,8 @@
           <!-- Icon Selector -->
           <div class="space-y-2">
             <div class="flex items-center justify-between">
-              <label class="block font-mono text-[11px] uppercase tracking-[0.18em] text-primary-container">Icon Selector</label>
-              <span id="admin-selected-icon-text" class="font-mono text-[11px] text-primary-container uppercase font-bold">Automatic</span>
+              <label class="block font-mono text-[11px] uppercase tracking-[0.18em] text-on-surface-variant">Icon Selector</label>
+              <span id="admin-selected-icon-text" class="font-mono text-[11px] text-outline uppercase font-bold">Automatic</span>
             </div>
             <div id="admin-icon-grid" class="grid grid-cols-3 sm:grid-cols-7 gap-2 p-3 border border-outline-variant/40 bg-[#050505]">
               <!-- Dynamically populated from script.html -->
@@ -167,7 +167,7 @@
           <!-- Photo Upload & Preview -->
           <div class="space-y-2">
             <div class="flex items-center justify-between">
-              <label class="block font-mono text-[11px] uppercase tracking-[0.18em] text-primary-container">Project Image / Cover</label>
+              <label class="block font-mono text-[11px] uppercase tracking-[0.18em] text-on-surface-variant">Project Image / Cover</label>
               <span class="font-mono text-[10px] text-outline-variant">Max {{ maxImageMb }} MB (PNG, JPG, WEBP, GIF)</span>
             </div>
 
@@ -191,7 +191,7 @@
                 <button
                   id="admin-photo-upload-trigger"
                   type="button"
-                  class="border border-outline-variant/50 hover:border-primary-container hover:text-primary-container bg-surface/40 px-3.5 py-1.5 font-mono text-xs uppercase tracking-wider text-on-surface transition-colors cursor-pointer flex items-center gap-1.5">
+                  class="border border-outline-variant/50 hover:border-outline hover:text-white bg-surface/40 px-3.5 py-1.5 font-mono text-xs uppercase tracking-wider text-on-surface transition-colors cursor-pointer flex items-center gap-1.5">
                   <span class="material-symbols-outlined text-sm" aria-hidden="true">upload</span>
                   <span>Upload Image</span>
                 </button>
@@ -209,7 +209,7 @@
           <!-- Full Text Content (HTML Code Area) -->
           <div class="space-y-2">
             <div class="flex items-center justify-between">
-              <label for="admin-form-content" class="block font-mono text-[11px] uppercase tracking-[0.18em] text-primary-container">
+              <label for="admin-form-content" class="block font-mono text-[11px] uppercase tracking-[0.18em] text-on-surface-variant">
                 Full Brief (HTML Source)
               </label>
               <span class="font-mono text-[10px] text-outline-variant">Raw HTML format</span>
@@ -220,7 +220,7 @@
               rows="12"
               spellcheck="false"
               placeholder="<p>Detailed architecture, system design, and implementation notes...</p>"
-              class="w-full bg-[#050505] border border-outline-variant/50 focus:border-primary-container focus:ring-1 focus:ring-primary-container font-mono text-xs leading-relaxed text-[#00ff41] p-4 outline-none resize-y transition-all"></textarea>
+              class="w-full bg-[#050505] border border-outline-variant/50 focus:border-outline focus:ring-1 focus:ring-outline/60 font-mono text-xs leading-relaxed text-on-surface p-4 outline-none resize-y transition-all"></textarea>
           </div>
 
           <!-- Actions Bar -->
@@ -229,7 +229,7 @@
               <button
                 id="admin-save-btn"
                 type="button"
-                class="bg-primary-container text-on-primary-container hover:bg-primary-fixed-dim px-6 py-2.5 font-mono text-xs font-bold uppercase tracking-[0.2em] transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                class="border border-primary-container/60 bg-primary-container/15 text-primary hover:bg-primary-container/25 hover:border-primary-container/90 px-6 py-2.5 font-mono text-xs font-bold uppercase tracking-[0.2em] transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                 <span class="material-symbols-outlined text-sm font-bold" aria-hidden="true">save</span>
                 <span>Save Project</span>
               </button>
