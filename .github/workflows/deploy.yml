@@ -4,41 +4,128 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Do not interrupt a migration or let two runs reset the same server checkout.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
 
 jobs:
   deploy:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     steps:
+      - name: Check SSH configuration
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in VPS_HOST VPS_USER VPS_SSH_KEY; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Missing required repository secret: $name"
+              exit 1
+            fi
+          done
+          if [[ ! "$VPS_PORT" =~ ^[1-9][0-9]{0,4}$ ]] || (( VPS_PORT > 65535 )); then
+            echo "::error::VPS_PORT must be a port number from 1 to 65535 (default: 22)."
+            exit 1
+          fi
+
       - name: Deploy
         uses: appleboy/ssh-action@v1
+        env:
+          GIT_SHA: ${{ github.sha }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || '22' }}
+          timeout: 60s
+          command_timeout: 25m
           envs: GIT_SHA
           script: |
-            set -euo pipefail
-            REPO=/opt/apps/begenchgeldyev-website
-            git config --global --replace-all safe.directory "$REPO"
-            cd "$REPO"
-            git fetch --prune origin main
-            git reset --hard "$GIT_SHA"
-            docker compose -f infra/compose.yml up --build -d --remove-orphans
-        env:
-          GIT_SHA: ${{ github.sha }}
+            bash -se <<'DEPLOY'
+              set -euo pipefail
+              trap 'echo "Deployment failed at remote script line $LINENO; public verification will not run." >&2' ERR
+              REPO=/opt/apps/begenchgeldyev-website
+              for command in git docker; do
+                command -v "$command" >/dev/null || {
+                  echo "Missing server prerequisite: $command" >&2
+                  exit 1
+                }
+              done
+              [[ "${GIT_SHA:-}" =~ ^[0-9a-f]{40}$ ]] || {
+                echo 'Missing or invalid deployment commit SHA.' >&2
+                exit 1
+              }
+              [[ -d "$REPO/.git" ]] || {
+                echo 'Provision the production Git checkout before deploying.' >&2
+                exit 1
+              }
+              cd "$REPO"
+              docker info >/dev/null
+              docker compose version
+              git_repo() { git -c safe.directory="$REPO" "$@"; }
+              export GIT_TERMINAL_PROMPT=0
+              git_repo remote set-url origin https://github.com/begenchgeldyev/bg-platform.git
+              git_repo fetch --prune origin main
+              git_repo cat-file -e "${GIT_SHA}^{commit}"
+              # Preserve ignored infra/.env and infra/site.env: never git clean.
+              git_repo reset --hard "$GIT_SHA"
+              for file in infra/.env infra/site.env; do
+                [[ -r "$file" && -s "$file" ]] || {
+                  echo "Provision a readable, nonempty $file on the server before deploying." >&2
+                  exit 1
+                }
+              done
+              # Shell environment overrides any previous SHA in infra/.env.
+              export GIT_SHA
+              # Never let Compose consume the bash -s deployment script on stdin.
+              compose() { docker compose --env-file infra/.env -f infra/compose.yml "$@" < /dev/null; }
+              if ! compose config --quiet >/dev/null 2>&1; then
+                echo 'Invalid Compose configuration: check server env files, required passwords and runtime image pins. Values are not logged.' >&2
+                exit 1
+              fi
+              compose build site
+              compose up -d --wait --wait-timeout 120 postgres
+              # Apply committed migrations with the NEW image before replacing site.
+              # Never seed or use db:push automatically on a deployment.
+              compose run --rm -T --no-deps -w /usr/src/app/packages/core site bun run db:migrate < /dev/null
+              compose up -d --wait --wait-timeout 180 --remove-orphans
+              # This bypasses public DNS/TLS and proves the target runs this image.
+              compose exec -T -e EXPECTED_GIT_SHA="$GIT_SHA" site bun -e '
+                const response = await fetch("http://127.0.0.1:8613/api/version", { signal: AbortSignal.timeout(10000) });
+                if (!response.ok) throw new Error("Local version endpoint is not ready");
+                const version = await response.json();
+                if (version.sha !== process.env.EXPECTED_GIT_SHA) throw new Error("Target commit does not match the deployment");
+                console.log("Target commit matches: " + version.sha);
+              '
+              echo "Deployment complete: target is healthy and serving $GIT_SHA."
+            DEPLOY
 
       - name: Verify the running site serves this commit
+        shell: bash
         run: |
           set -euo pipefail
           for attempt in $(seq 1 20); do
-            live=$(curl -sf --max-time 10 https://begenchgeldyev.com/api/version \
-              | sed -n 's/.*"sha":"\([^"]*\)".*/\1/p') || live=""
+            live=$(curl --fail --silent --show-error --connect-timeout 5 --max-time 10 \
+              -H 'Cache-Control: no-cache' "https://begenchgeldyev.com/api/version?deploy=$GITHUB_SHA" \
+              | jq -er '.sha | strings') || live=""
             if [ "$live" = "$GITHUB_SHA" ]; then
               echo "live commit matches: $live"
               exit 0
             fi
-            echo "attempt $attempt: live='$live' expected='$GITHUB_SHA'"
-            sleep 6
+            echo "attempt $attempt/20: public endpoint has not returned the expected commit."
+            if (( attempt < 20 )); then sleep 6; fi
           done
-          echo "::error::Site is not serving $GITHUB_SHA after 2 minutes."
+          echo "::error::Public HTTPS endpoint is not serving $GITHUB_SHA. Target-local verification passed; check domain DNS points to the VPS_HOST server, ports 80/443 and Caddy TLS."
           exit 1

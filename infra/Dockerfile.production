@@ -1,0 +1,22 @@
+# syntax=docker/dockerfile:1
+# Production equivalent of apps/site/Dockerfile, with a pinnable runtime and
+# the root TypeScript configuration required by both workspace packages.
+ARG BUN_IMAGE=oven/bun:1
+FROM ${BUN_IMAGE}
+WORKDIR /usr/src/app
+
+COPY package.json bun.lock tsconfig.base.json ./
+COPY apps/site/package.json ./apps/site/
+COPY packages/core/package.json ./packages/core/
+RUN bun install --frozen-lockfile
+
+COPY apps/site ./apps/site
+COPY packages/core ./packages/core
+
+ARG GIT_SHA=unknown
+ENV GIT_SHA=$GIT_SHA
+LABEL org.opencontainers.image.revision=$GIT_SHA
+ENV NODE_ENV=production
+WORKDIR /usr/src/app/apps/site
+EXPOSE 8613
+CMD ["bun", "server.ts"]

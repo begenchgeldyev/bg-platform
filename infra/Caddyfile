@@ -1,8 +1,15 @@
 www.begenchgeldyev.com {
-    redir https://begenchgeldyev.com{uri} permanent
+	redir https://begenchgeldyev.com{uri} permanent
 }
 
 begenchgeldyev.com {
-    reverse_proxy site:8613
-    encode gzip
+	reverse_proxy site:8613
+	encode gzip
+}
+
+# Container-loopback readiness endpoint; never published on the host.
+# Allows proxy verification while public DNS/ACME is still being configured.
+http://127.0.0.1:8080 {
+	bind 127.0.0.1
+	reverse_proxy site:8613
 }
