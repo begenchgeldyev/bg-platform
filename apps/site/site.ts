@@ -30,6 +30,7 @@ const MIME: Record<string, string> = {
   '.pdf': 'application/pdf',
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
+  '.ttf': 'font/ttf',
   '.woff2': 'font/woff2',
 };
 
@@ -97,10 +98,11 @@ async function renderSharedHead() {
 function renderNavLink(activeNav: NavKey | undefined, href: string, label: string, key: NavKey) {
   const isActive = activeNav === key;
   const classes = isActive
-    ? 'font-label uppercase tracking-widest text-xs font-semibold text-primary-container border-b-2 border-primary-container pb-1'
-    : 'font-label uppercase tracking-widest text-xs font-semibold text-white/80 hover:text-primary-container transition-colors';
+    ? 'inline-flex items-center min-h-11 font-label uppercase tracking-wider text-sm font-semibold text-primary-container'
+    : 'inline-flex items-center min-h-11 font-label uppercase tracking-wider text-sm font-semibold text-white/80 hover:text-primary-container transition-colors';
   const current = isActive ? ' aria-current="page"' : '';
-  return `<a class="${classes}" href="${href}"${current}>${label}</a>`;
+  const labelClasses = isActive ? 'border-b-2 border-primary-container pb-1' : 'border-b-2 border-transparent pb-1';
+  return `<a class="${classes}" href="${href}"${current}><span class="${labelClasses}">${label}</span></a>`;
 }
 
 async function renderHeader(config: PageConfig, lang: Lang) {
@@ -113,18 +115,18 @@ async function renderHeader(config: PageConfig, lang: Lang) {
     </div>`;
 
   const terminal = config.showTerminalIcon
-    ? `<span class="material-symbols-outlined cursor-pointer hover:text-primary-container transition-colors">terminal</span>`
+    ? `<span class="material-symbols-outlined hidden sm:inline-block cursor-default" aria-hidden="true">terminal</span>`
     : '';
 
   const langButtons = (['en', 'ru'] as const)
     .map((code) => {
       const active = code === lang;
       const classes = active ? 'text-primary-container font-semibold' : 'text-white/80 hover:text-primary-container transition-colors';
-      return `<button type="button" data-lang="${code}" aria-pressed="${active}" class="${classes}">${code}</button>`;
+      return `<button type="button" data-lang="${code}" aria-pressed="${active}" class="min-w-9 min-h-11 ${classes}">${code}</button>`;
     })
     .join('<span class="text-outline-variant/60" aria-hidden="true">|</span>');
 
-  const langToggle = `<div class="flex items-center gap-2 font-mono text-xs uppercase tracking-widest" role="group" aria-label="${t(lang, 'langToggleLabel')}">${langButtons}</div>
+  const langToggle = `<div class="flex items-center gap-1 font-mono text-sm uppercase tracking-wider" role="group" aria-label="${t(lang, 'langToggleLabel')}">${langButtons}</div>
 <script>
   document.querySelectorAll('[data-lang]').forEach((el) => {
     const switchTo = async () => {

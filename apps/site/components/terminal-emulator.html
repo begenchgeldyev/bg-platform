@@ -54,7 +54,7 @@
 					const row = (cmd, desc) =>
 						`<div><span class="text-primary-container">${cmd.padEnd(26)}</span><span class="text-on-surface-variant/90">${desc}</span></div>`;
 					return (
-						`<div class="pl-2 space-y-1" style="white-space:pre;">` +
+						`<div class="terminal-help pl-2 space-y-2">` +
 						row("help", "show this message") +
 						row("whoami", "about me") +
 						row("ask [question]", "ask an AI about my experience") +
@@ -180,7 +180,7 @@
 				const trimmed = raw.trim();
 
 				// always echo the prompt + command (even blank Enter)
-				appendLine(`<div class="flex gap-2 mt-2">${PROMPT} <span class="text-white">${trimmed.replace(/</g, "&lt;")}</span></div>`);
+				appendLine(`<div class="flex flex-wrap gap-x-2 mt-2">${PROMPT} <span class="text-white min-w-0">${trimmed.replace(/</g, "&lt;")}</span></div>`);
 				if (!trimmed) return;
 
 				const [cmd, ...args] = trimmed.split(/\s+/);
@@ -233,7 +233,7 @@
 					if (matches.length === 1) {
 						input.value = matches[0] + (parts.length > 1 ? " " + parts.slice(1).join(" ") : "");
 					} else if (matches.length > 1) {
-						appendLine(`<div class="flex gap-2 mt-2">${PROMPT} <span class="text-white">${partial.replace(/</g, "&lt;")}</span></div>`);
+						appendLine(`<div class="flex flex-wrap gap-x-2 mt-2">${PROMPT} <span class="text-white min-w-0">${partial.replace(/</g, "&lt;")}</span></div>`);
 						appendLine(`<div class="text-on-surface-variant/70 pl-2 pb-1">${matches.join("  ")}</div>`);
 					}
 				} else if (e.key === "l" && e.ctrlKey) {
