@@ -49,6 +49,51 @@
       <span>drwxr-xr-x  root  experiments/</span>
     </div>`;
 
+			// Single source of truth for `open` targets; Tab completion reads the same table.
+			const LINKS = {
+				github: "https://github.com/begenchgeldyev",
+				linkedin: "https://linkedin.com/in/begench-geldyev",
+				cv: "/public/Begench%20Geldyev(CV).pdf",
+			};
+
+			function escapeText(value) {
+				return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+			}
+
+			function askQuestion(question) {
+				if (!question) return err("ask: usage — ask [question], e.g. ask what did you build at Synecta?");
+				const assistant = window.askChat;
+				if (!assistant) return err("ask: assistant is unavailable");
+				if (assistant.busy()) return err("ask: still answering…");
+
+				const line = document.createElement("div");
+				line.className = "pb-1 pl-2 text-on-surface-variant/90";
+				line.innerHTML =
+					'<span class="text-secondary font-bold">assistant:</span> <span class="whitespace-pre-wrap" data-answer></span><span class="blinking-cursor"></span>';
+				body.insertBefore(line, inputLine);
+				body.scrollTop = body.scrollHeight;
+				const answer = line.querySelector("[data-answer]");
+				const cursor = line.querySelector(".blinking-cursor");
+
+				assistant.ask(question, {
+					onText(text) {
+						answer.textContent = text;
+						body.scrollTop = body.scrollHeight;
+					},
+					onDone() {
+						cursor.remove();
+					},
+					onError(message) {
+						const error = document.createElement("span");
+						error.className = "text-error/80";
+						error.textContent = `ask: ${message}`;
+						line.replaceChildren(error);
+						body.scrollTop = body.scrollHeight;
+					},
+				});
+				return null;
+			}
+
 			const COMMANDS = {
 				help() {
 					const row = (cmd, desc) =>
@@ -79,38 +124,7 @@
 				},
 
 				ask(args) {
-					const question = args.join(" ");
-					if (!question) return err("ask: usage — ask [question], e.g. ask what did you build at Synecta?");
-					const assistant = window.askChat;
-					if (!assistant) return err("ask: assistant is unavailable");
-					if (assistant.busy()) return err("ask: still answering…");
-
-					const line = document.createElement("div");
-					line.className = "pb-1 pl-2 text-on-surface-variant/90";
-					line.innerHTML =
-						'<span class="text-secondary font-bold">assistant:</span> <span class="whitespace-pre-wrap" data-answer></span><span class="blinking-cursor"></span>';
-					body.insertBefore(line, inputLine);
-					body.scrollTop = body.scrollHeight;
-					const answer = line.querySelector("[data-answer]");
-					const cursor = line.querySelector(".blinking-cursor");
-
-					assistant.ask(question, {
-						onText(text) {
-							answer.textContent = text;
-							body.scrollTop = body.scrollHeight;
-						},
-						onDone() {
-							cursor.remove();
-						},
-						onError(message) {
-							const error = document.createElement("span");
-							error.className = "text-error/80";
-							error.textContent = `ask: ${message}`;
-							line.replaceChildren(error);
-							body.scrollTop = body.scrollHeight;
-						},
-					});
-					return null;
+					return askQuestion(args.join(" "));
 				},
 
 				ls() {
@@ -120,7 +134,7 @@
 				cat(args) {
 					const file = args[0];
 					if (!file) return err("cat: missing operand");
-					if (FILES[file]) return FILES[file];
+					if (Object.hasOwn(FILES, file)) return FILES[file];
 					return err(`cat: ${file}: No such file or directory`);
 				},
 
@@ -152,20 +166,15 @@
 
 				open(args) {
 					const target = args[0];
-					const links = {
-						github: "https://github.com/begenchgeldyev",
-						linkedin: "https://linkedin.com/in/begench-geldyev",
-						cv: "/public/Begench%20Geldyev(CV).pdf",
-					};
 					if (!target) return err("open: specify target — github | linkedin | cv");
-					if (!links[target]) return err(`open: unknown target '${target}'`);
-					window.open(links[target], "_blank");
+					if (!Object.hasOwn(LINKS, target)) return err(`open: unknown target '${target}'`);
+					window.open(LINKS[target], "_blank");
 					return `<span class="text-primary-container/70 pl-2">Opening ${target}...</span>`;
 				},
 			};
 
 			function err(msg) {
-				return `<span class="text-error/80 pl-2">${msg}</span>`;
+				return `<span class="text-error/80 pl-2">${escapeText(msg)}</span>`;
 			}
 
 			function appendLine(html) {
@@ -180,21 +189,90 @@
 				const trimmed = raw.trim();
 
 				// always echo the prompt + command (even blank Enter)
-				appendLine(`<div class="flex flex-wrap gap-x-2 mt-2">${PROMPT} <span class="text-white min-w-0">${trimmed.replace(/</g, "&lt;")}</span></div>`);
+				appendLine(`<div class="flex flex-wrap gap-x-2 mt-2">${PROMPT} <span class="text-white min-w-0">${escapeText(trimmed)}</span></div>`);
 				if (!trimmed) return;
 
 				const [cmd, ...args] = trimmed.split(/\s+/);
-				const fn = COMMANDS[cmd];
+				const fn = Object.hasOwn(COMMANDS, cmd) ? COMMANDS[cmd] : null;
 				let output;
 
-				if (fn) {
+				// Only literal manual command syntax dispatches commands. Sentences such
+				// as "projects you built?" must never cause navigation or link opening.
+				if (cmd === "ask") {
+					output = askQuestion(trimmed.slice(cmd.length).trim());
+				} else if (fn && (args.length === 0 || ((cmd === "cat" || cmd === "open") && args.length === 1))) {
 					output = fn(args);
 				} else {
-					output = err(`${cmd}: command not found — type <span class="text-primary-container">help</span>`);
+					output = askQuestion(trimmed);
 				}
 
 				if (output !== null && output !== undefined) {
 					appendLine(`<div class="pb-1">${output}</div>`);
+				}
+			}
+
+			// Locate the whitespace-delimited token around the caret without normalising
+			// the line, so completion can splice one token and keep every other byte.
+			function tokenAtCaret(value, caret) {
+				const isSpace = (char) => char === " " || char === "\t";
+				const pos = Math.max(0, Math.min(caret, value.length));
+				let start;
+				let end;
+
+				if (pos > 0 && !isSpace(value[pos - 1])) {
+					start = pos - 1;
+					while (start > 0 && !isSpace(value[start - 1])) start--;
+					end = pos;
+					while (end < value.length && !isSpace(value[end])) end++;
+				} else if (pos < value.length && !isSpace(value[pos])) {
+					start = pos;
+					end = pos;
+					while (end < value.length && !isSpace(value[end])) end++;
+				} else {
+					start = pos;
+					end = pos;
+				}
+
+				const preceding = value.slice(0, start).match(/\S+/g) ?? [];
+				return { start, end, token: value.slice(start, end), index: preceding.length };
+			}
+
+			function commonPrefix(values) {
+				return values.reduce((prefix, value) => {
+					let i = 0;
+					while (i < prefix.length && i < value.length && prefix[i] === value[i]) i++;
+					return prefix.slice(0, i);
+				});
+			}
+
+			function complete() {
+				const value = input.value;
+				const caret = typeof input.selectionStart === "number" ? input.selectionStart : value.length;
+				const { start, end, token, index } = tokenAtCaret(value, caret);
+				const command = value.trim().split(/\s+/, 1)[0];
+				let candidates = null;
+
+				if (index === 0) candidates = Object.keys(COMMANDS);
+				else if (index === 1 && command === "cat") candidates = Object.keys(FILES);
+				else if (index === 1 && command === "open") candidates = Object.keys(LINKS);
+				if (!candidates) return;
+
+				const matches = candidates.filter((candidate) => candidate.startsWith(token));
+				if (matches.length === 0) return;
+				if (matches.length === 1 && matches[0] === token) return;
+
+				const replacement = matches.length === 1 ? matches[0] : commonPrefix(matches);
+				if (replacement !== token) {
+					input.value = value.slice(0, start) + replacement + value.slice(end);
+					const nextCaret = start + replacement.length;
+					if (input.setSelectionRange) input.setSelectionRange(nextCaret, nextCaret);
+					syncDisplay();
+				}
+
+				if (matches.length > 1) {
+					const echoed = escapeText(value.slice(0, start + token.length));
+					appendLine(`<div class="flex flex-wrap gap-x-2 mt-2">${PROMPT} <span class="text-white min-w-0">${echoed}</span></div>`);
+					appendLine(`<div class="text-on-surface-variant/70 pl-2 pb-1">${matches.join("  ")}</div>`);
 				}
 			}
 
@@ -224,18 +302,9 @@
 					}
 					input.value = history[histIdx] ?? "";
 					syncDisplay();
-				} else if (e.key === "Tab") {
+				} else if (e.key === "Tab" && !e.shiftKey) {
 					e.preventDefault();
-					const parts = input.value.split(/\s+/);
-					const partial = parts[0];
-					const allCmds = Object.keys(COMMANDS);
-					const matches = allCmds.filter((c) => c.startsWith(partial) && c !== partial);
-					if (matches.length === 1) {
-						input.value = matches[0] + (parts.length > 1 ? " " + parts.slice(1).join(" ") : "");
-					} else if (matches.length > 1) {
-						appendLine(`<div class="flex flex-wrap gap-x-2 mt-2">${PROMPT} <span class="text-white min-w-0">${partial.replace(/</g, "&lt;")}</span></div>`);
-						appendLine(`<div class="text-on-surface-variant/70 pl-2 pb-1">${matches.join("  ")}</div>`);
-					}
+					complete();
 				} else if (e.key === "l" && e.ctrlKey) {
 					e.preventDefault();
 					COMMANDS.clear();

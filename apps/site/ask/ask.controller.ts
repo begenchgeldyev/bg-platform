@@ -1,6 +1,7 @@
 import {
   convertToModelMessages,
   createUIMessageStreamResponse,
+  isStepCount,
   type LanguageModel,
   streamText,
   toUIMessageStream,
@@ -10,15 +11,18 @@ import {
 import type { RateLimiter } from '../http/rate-limit';
 import { errorResponse, readBodyWithin, refuseCrossSite, refuseNonJson } from '../http/requests';
 import { buildInstructions } from './instructions';
+import { createVirtualTools, plainBounded, type VirtualToolDeps, withAbort } from './virtual-tools';
 
 export const ASK_LIMITS = {
   maxBodyBytes: 32 * 1024,
   maxMessages: 20,
   maxQuestionChars: 500,
   maxOutputTokens: 500,
+  maxSteps: 3,
+  timeoutMs: 30000,
 } as const;
 
-type AskControllerDeps = {
+type AskControllerDeps = VirtualToolDeps & {
   model: LanguageModel | null;
   rateLimiter: RateLimiter;
   loadCvText: () => Promise<string>;
@@ -106,12 +110,30 @@ export class AskController {
       return errorResponse(400, violation);
     }
 
+    const signal = AbortSignal.any([req.signal, AbortSignal.timeout(ASK_LIMITS.timeoutMs)]);
+    let cvText: string;
+    try {
+      cvText = plainBounded(await withAbort(loadCvText(), signal), 12000);
+    } catch {
+      return errorResponse(503, 'assistant is unavailable');
+    }
+    const virtual = createVirtualTools({ ...this.deps, loadCvText: async () => cvText }, signal);
     const result = streamText({
       model,
-      instructions: buildInstructions(await loadCvText()),
+      instructions: buildInstructions(cvText),
       messages: await convertToModelMessages(toPlainTextMessages(messages)),
       maxOutputTokens: ASK_LIMITS.maxOutputTokens,
-      abortSignal: req.signal,
+      tools: virtual.tools,
+      stopWhen: isStepCount(ASK_LIMITS.maxSteps),
+      prepareStep: ({ stepNumber }) => {
+        if (stepNumber >= ASK_LIMITS.maxSteps - 1) {
+          virtual.disable();
+          return { toolChoice: 'none', activeTools: [] };
+        }
+      },
+      maxRetries: 0,
+      timeout: ASK_LIMITS.timeoutMs,
+      abortSignal: signal,
       onError: ({ error }) => console.error('ask: generation failed', error),
     });
 

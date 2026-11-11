@@ -3,6 +3,19 @@ import { AbstractChat, APICallError, type ChatState, type ChatStatus, DefaultCha
 const MAX_HISTORY = 20;
 const UNAVAILABLE = 'the assistant is unavailable';
 
+export function plainTextHistory(messages: UIMessage[]): UIMessage[] {
+  return messages
+    .flatMap(({ id, role, parts }) => {
+      if (role !== 'user' && role !== 'assistant') return [];
+      const text = parts
+        .filter((part) => part.type === 'text')
+        .map((part) => part.text)
+        .join('');
+      return text.trim() ? [{ id, role, parts: [{ type: 'text' as const, text }] }] : [];
+    })
+    .slice(-MAX_HISTORY);
+}
+
 export type AskHandlers = {
   onText: (text: string) => void;
   onDone: () => void;
@@ -45,7 +58,7 @@ class TerminalChat extends AbstractChat<UIMessage> {
       state: new TerminalChatState(onChange),
       transport: new DefaultChatTransport({
         api,
-        prepareSendMessagesRequest: ({ id, messages }) => ({ body: { id, messages: messages.slice(-MAX_HISTORY) } }),
+        prepareSendMessagesRequest: ({ id, messages }) => ({ body: { id, messages: plainTextHistory(messages) } }),
       }),
     });
   }
@@ -55,20 +68,23 @@ function textOf(message: UIMessage | undefined): string {
   return (message?.parts ?? []).map((part) => (part.type === 'text' ? part.text : '')).join('');
 }
 
-function serverError(responseBody: string | undefined): string | null {
+function safeErrorMessage(error: Error | undefined): string {
+  if (!APICallError.isInstance(error)) return UNAVAILABLE;
+  const safeMessage =
+    error.statusCode === 429
+      ? 'rate limit reached, try again in a few minutes'
+      : error.statusCode === 400
+        ? 'questions are limited to 500 characters'
+        : null;
+  if (!safeMessage) return UNAVAILABLE;
   try {
-    const body = JSON.parse(responseBody ?? '');
-    return typeof body?.error === 'string' ? body.error : null;
+    const body = JSON.parse(error.responseBody ?? '');
+    // Return local static text only for exact, known status/message pairs. Never
+    // relay arbitrary server JSON, provider details or error.message to visitors.
+    return body?.error === safeMessage ? safeMessage : UNAVAILABLE;
   } catch {
-    return null;
+    return UNAVAILABLE;
   }
-}
-
-function errorMessage(error: Error | undefined): string {
-  if (APICallError.isInstance(error)) {
-    return serverError(error.responseBody) ?? UNAVAILABLE;
-  }
-  return error?.message || UNAVAILABLE;
 }
 
 export function createAskChat({ api }: { api: string }): AskChat {
@@ -91,7 +107,7 @@ export function createAskChat({ api }: { api: string }): AskChat {
         next.onDone();
         return;
       }
-      const message = errorMessage(chat.error);
+      const message = safeErrorMessage(chat.error);
       chat.messages = chat.messages.slice(0, before);
       chat.clearError();
       next.onError(message);

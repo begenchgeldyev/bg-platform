@@ -1,0 +1,54 @@
+<div data-hero-role>
+  <h1 class="text-[clamp(1.5rem,7.6vw,6rem)] font-headline font-bold tracking-tighter text-white leading-tight whitespace-nowrap">
+    <button
+      type="button"
+      data-role-switch
+      disabled
+      aria-describedby="role-hint"
+      aria-keyshortcuts="Escape"
+      class="block w-full text-center disabled:cursor-default enabled:cursor-pointer">
+      <span class="sr-only" data-role-label>Software Engineer</span>
+      <span aria-hidden="true"><span data-role-word>Software</span> <span class="text-primary-container">Engineer</span></span>
+    </button>
+  </h1>
+  <span id="role-hint" hidden>Activate to switch role. Escape pauses or resumes automatic changes.</span>
+</div>
+<style>
+/* These structural rules also keep the static heading usable without the CDN/JS. */
+[data-hero-role] h1 {
+  color: #f2f1f0;
+  font-size: clamp(1.5rem, 7.6vw, 6rem);
+  line-height: 1.25;
+  letter-spacing: -0.05em;
+  white-space: nowrap;
+}
+[data-role-switch] {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: center;
+}
+[data-role-label] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+[data-role-word] {
+  display: inline-block;
+  overflow: clip;
+  vertical-align: bottom;
+  text-align: center;
+}
+[data-role-word] + span {
+  color: #00ff41;
+}
+</style>
+<script src="/public/hero-role.js" defer></script>

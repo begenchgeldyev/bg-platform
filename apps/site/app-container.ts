@@ -34,11 +34,12 @@ container.registerFactory(AdminController, (c) => {
   });
 });
 
-container.registerFactory(AskController, () => {
+container.registerFactory(AskController, (c) => {
   return new AskController({
     model: process.env.OPENAI_API_KEY ? openai(process.env.OPENAI_MODEL || 'gpt-5.4-mini') : null,
     rateLimiter: createRateLimiter({ limit: 10, windowMs: 10 * 60 * 1000 }),
     loadCvText,
+    listPublicProjects: () => c.resolve(ProjectsRepository).list({ includeHidden: false }),
   });
 });
 

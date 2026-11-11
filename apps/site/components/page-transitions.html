@@ -1,0 +1,50 @@
+<style>
+/* Public documents only. Native navigation stays in charge of history, focus and links.
+   Paint the canvas before the CDN loads; leave the sticky header and footer still. */
+html {
+  background: #0a0a0a;
+  view-transition-name: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition {
+    navigation: auto;
+  }
+  main {
+    view-transition-name: page-content;
+  }
+  ::view-transition-group(page-content) {
+    animation: none;
+  }
+  ::view-transition-old(page-content) {
+    animation: page-out 120ms ease-out both;
+    mix-blend-mode: normal;
+  }
+  ::view-transition-new(page-content) {
+    animation: page-in 160ms ease-out both;
+    mix-blend-mode: normal;
+  }
+  @keyframes page-out {
+    to {
+      opacity: 0;
+      transform: translateY(-2px);
+    }
+  }
+  @keyframes page-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
+}
+/* Also stop an in-flight transition if the preference changes mid-navigation. */
+@media (prefers-reduced-motion: reduce) {
+  @view-transition {
+    navigation: none;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none;
+  }
+}
+</style>
