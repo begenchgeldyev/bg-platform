@@ -65,5 +65,5 @@ The `whoami`, `ls`, `cat` and `projects` commands the assistant may run. They re
 _Avoid_: shell, sandbox, tool calls, commands
 
 **Grounding**:
-The CV page's text, the only source the assistant may answer from. There are no embeddings and no stored documents.
-_Avoid_: knowledge base, RAG, index, training data
+The CV page's text, plus the read-only virtual site lookups the assistant may make. Nothing comes from an index and nothing is fetched from the web.
+_Avoid_: knowledge base, RAG, index, training data, embeddings
