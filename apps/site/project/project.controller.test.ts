@@ -292,6 +292,101 @@ describe('ProjectController writes', () => {
 });
 
 describe('project cards', () => {
+  test('hidden owner cards describe their visibility without changing public link names', async () => {
+    const subject = controller({ projects: projectsWithHidden(), canEdit: true });
+    const html = await (await subject.controller.get(hxList())).text();
+    expect(html).toContain('id="project-visibility-2"');
+    expect(html).toContain('aria-describedby="project-visibility-2"');
+    expect(html).not.toContain('aria-describedby="project-visibility-1"');
+    expect(html).toContain('aria-labelledby="project-title-1 project-action-1"');
+  });
+
+  test('the empty result can receive retry focus without adding a Tab stop', async () => {
+    const html = await (await controller().controller.get(hxList())).text();
+    expect(html).toContain('tabindex="-1"');
+    expect(html).not.toContain('tabindex="0"');
+  });
+
+  test('uses the same semantic cover for 0, 1, 2, 3 and 5 records without ordinal hierarchy', async () => {
+    for (const total of [0, 1, 2, 3, 5]) {
+      const subject = controller({ projects: Array.from({ length: total }, (_, i) => project({ id: i + 1, name: `Project ${i}` })) });
+      const html = await (await subject.controller.get(hxList())).text();
+      expect((html.match(/class="project-card"/g) ?? []).length).toBe(total);
+      expect((html.match(/class="project-card-link"/g) ?? []).length).toBe(total);
+      expect(html).not.toMatch(/col-span-|line-clamp-|min-h-\[|grayscale|opacity-40/);
+      if (total === 0) expect(html).toContain('There are no published entries');
+    }
+  });
+
+  test('escapes complete copy and tags and links only to the real detail route', async () => {
+    const description = '<script>unsafe</script> '.repeat(40);
+    const subject = controller({ projects: [project({ name: '<Tool "&">', description, tags: ['<svg onload="evil">'] })] });
+    const html = await (await subject.controller.get(hxList())).text();
+    expect(html).toContain('&lt;Tool &quot;&amp;&quot;&gt;');
+    expect(html).toContain(description.trim().replaceAll('<', '&lt;').replaceAll('>', '&gt;'));
+    expect(html).toContain('&lt;svg onload=&quot;evil&quot;&gt;');
+    expect(html).not.toContain('<script>unsafe');
+    expect((html.match(/<a\s/g) ?? []).length).toBe(1);
+    expect(html).toContain('href="/projects/1"');
+    expect(html).toContain('aria-labelledby="project-title-1 project-action-1"');
+    expect(html).not.toContain('github.com');
+  });
+
+  test('serves only explicitly mapped lossless derivatives with PNG fallback and reserved dimensions', async () => {
+    const subject = controller({ projects: [project({ image: '/public/projects/pantheon-pixel.png' })] });
+    const html = await (await subject.controller.get(hxList())).text();
+    expect(html).toContain(' data-srcset="/public/projects/pantheon-pixel.webp"');
+    expect(html).toContain(' data-src="/public/projects/pantheon-pixel.png"');
+    expect(html).not.toMatch(/\ssrc(?:set)?\s*=/);
+    expect(html).toContain('width="1448" height="1086"');
+    expect(html).toContain('loading="lazy"');
+    expect(html).toContain('decoding="async"');
+    expect(html).toContain('alt=""');
+    const other = controller({ projects: [project({ image: '/public/custom.png' })] });
+    const custom = await (await other.controller.get(hxList())).text();
+    expect(custom).toContain(' data-src="/public/custom.png"');
+    expect(custom).not.toMatch(/\ssrc(?:set)?\s*=/);
+    expect(custom).not.toContain('custom.webp');
+  });
+
+  test('missing or unsafe image URLs keep a useful fallback, never an empty or executable image', async () => {
+    for (const image of [null, '', '  ', 'javascript:alert(1)', 'data:image/svg+xml,<svg onload="evil"/>']) {
+      const subject = controller({ projects: [project({ image, icon: 'database' })] });
+      const html = await (await subject.controller.get(hxList())).text();
+      expect(html).toContain('project-cover-fallback');
+      expect(html).toContain('database');
+      expect(html).not.toContain('<img');
+      expect(html).toContain('No short description provided.');
+    }
+  });
+
+  test('escapes an image attribute without turning stored quotes into handlers', async () => {
+    const subject = controller({ projects: [project({ image: '/public/image.png" onerror="alert(1)' })] });
+    const html = await (await subject.controller.get(hxList())).text();
+    expect(html).toContain('data-src="/public/image.png&quot; onerror=&quot;alert(1)"');
+    expect(html).not.toContain(' onerror="');
+  });
+
+  test('localizes the action and empty state without translating stored project facts', async () => {
+    const request = new Request('http://localhost/api/projects', { headers: { 'HX-Request': 'true', cookie: 'lang=ru' } });
+    const subject = controller({ projects: [project({ name: 'Pantheon' })] });
+    const html = await (await subject.controller.get(request)).text();
+    expect(html).toContain('Открыть проект');
+    expect(html).toContain('Pantheon');
+    const empty = await (await controller().controller.get(request)).text();
+    expect(empty).toContain('Пока нет опубликованных проектов');
+  });
+
+  test('detail content keeps supplied source links and owner-only controls', async () => {
+    const item = project({ content: '<p><a href="https://github.com/begenchgeldyev/pantheon">Source</a></p>' });
+    const req = new Request('http://localhost/projects/1');
+    const visitor = await (await controller({ projects: [item] }).controller.getPageById(req, 1)).text();
+    expect(visitor).toContain('href="https://github.com/begenchgeldyev/pantheon"');
+    expect(visitor).not.toContain('id="project-upload-trigger"');
+    const owner = await (await controller({ projects: [item], canEdit: true }).controller.getPageById(req, 1)).text();
+    expect(owner).toContain('id="project-upload-trigger"');
+  });
+
   test('cards use the tags field and the chosen icon', async () => {
     const { controller: subject } = controller({
       projects: [project({ id: 1, name: 'Tool', tags: ['Go'], icon: 'database' })],

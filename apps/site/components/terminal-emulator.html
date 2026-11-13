@@ -1,314 +1,372 @@
-		<script type="module" src="/assets/ask-chat.js"></script>
-		<script>
-		(() => {
-			const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-			const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-			const now = new Date();
-			const pad = (n) => String(n).padStart(2, "0");
-			const loginStr = `Last login: ${days[now.getDay()]} ${months[now.getMonth()]} ${now.getDate()} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())} on ttys001`;
-			document.getElementById("last-login").textContent = loginStr;
+<script type="module" src="/assets/ask-chat.js"></script>
+<script>
+(() => {
+  const body = document.getElementById('terminal-body');
+  const inputLine = document.getElementById('input-line');
+  const input = document.getElementById('terminal-input');
+  const prompt = document.getElementById('terminal-prompt');
+  const loader = document.getElementById('terminal-loader');
+  const status = document.getElementById('terminal-status');
+  const copy =
+    document.documentElement.lang === 'ru'
+      ? {
+          waiting: 'Готовлю ответ…',
+          ready: 'Ответ готов.',
+          you: 'Вы:',
+          assistant: 'Помощник:',
+          unavailable: 'Помощник недоступен. Попробуйте ещё раз.',
+          rate: 'Слишком много сообщений. Попробуйте через несколько минут.',
+          length: 'Не более 500 символов. Сократите сообщение и попробуйте ещё раз.',
+        }
+      : {
+          waiting: 'Preparing a reply…',
+          ready: 'Reply ready.',
+          you: 'You:',
+          assistant: 'Assistant:',
+          unavailable: 'The assistant is unavailable. Please try again.',
+          rate: 'Rate limit reached. Please try again in a few minutes.',
+          length: 'Questions are limited to 500 characters. Please shorten your message and try again.',
+        };
+  const PROMPT = `<span aria-hidden="true" class="text-primary-container font-bold">&gt;</span><span class="sr-only">${copy.you}</span>`;
+  const history = [];
+  let histIdx = -1;
+  let busy = false;
+  let currentTurn = null;
+  const nearBottom = () => body.scrollHeight - body.clientHeight - body.scrollTop <= 32;
 
-			const body = document.getElementById("terminal-body");
-			const inputLine = document.getElementById("input-line");
-			const input = document.getElementById("terminal-input");
-			const display = document.getElementById("terminal-display");
-			const PROMPT = '<span class="text-primary-container font-bold">begench@127.0.0.1/$</span>';
-			const history = [];
-			let histIdx = -1;
+  // Only the composer owns focus. Reading/selecting transcript text must not scroll or refocus it.
+  inputLine.addEventListener('click', () => {
+    if (!window.getSelection()?.toString()) input.focus({ preventScroll: true });
+  });
+  body.addEventListener('scroll', () => {
+    if (currentTurn) currentTurn.follow = nearBottom();
+  });
 
-			// keep hidden input focused whenever terminal is clicked
-			document.getElementById("terminal-wrap").addEventListener("click", () => input.focus());
+  const FILES = {
+    'philosophy.txt': `<div class="text-primary-container/90 space-y-1 pl-2">
+		      <div>&gt; Performance is not a feature; it is a fundamental requirement.</div>
+		      <div>&gt; Code should be as readable as prose and as robust as industrial steel.</div>
+		      <div>&gt; User experience is the ultimate metric of success in any technical architecture.</div>
+		    </div>`,
+    'skills.txt': `<div class="text-on-surface-variant/90 space-y-1 pl-2">
+		      <div><span class="text-secondary">frontend:</span>  React, TypeScript, HTMX, Tailwind CSS</div>
+		      <div><span class="text-secondary">backend:</span>   Go, Node.js, Bun, REST, gRPC</div>
+		      <div><span class="text-secondary">tools:</span>     Neovim, Tmux, Git, Docker, Linux</div>
+		      <div><span class="text-secondary">databases:</span> PostgreSQL, MongoDB, Redis</div>
+		    </div>`,
+    'contact.txt': `<div class="text-on-surface-variant/90 space-y-1 pl-2">
+		      <div><span class="text-secondary">email:</span>    begenchgeldyev@gmail.com</div>
+		      <div><span class="text-secondary">github:</span>   github.com/begenchgeldyev</div>
+		      <div><span class="text-secondary">linkedin:</span> linkedin.com/in/begench-geldyev</div>
+		    </div>`,
+  };
 
-			function syncDisplay() {
-				display.textContent = input.value;
-			}
+  const LS_OUTPUT = `<div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 text-on-surface-variant/80 pl-2 space-y-0.5">
+		      <span>drwxr-xr-x  root  philosophy.txt</span>
+		      <span>drwxr-xr-x  root  skills.txt</span>
+		      <span>drwxr-xr-x  root  contact.txt</span>
+		      <span>drwxr-xr-x  root  experiments/</span>
+		    </div>`;
 
-			const FILES = {
-				"philosophy.txt": `<div class="text-primary-container/90 space-y-1 pl-2">
-      <div>&gt; Performance is not a feature; it is a fundamental requirement.</div>
-      <div>&gt; Code should be as readable as prose and as robust as industrial steel.</div>
-      <div>&gt; User experience is the ultimate metric of success in any technical architecture.</div>
-    </div>`,
-				"skills.txt": `<div class="text-on-surface-variant/90 space-y-1 pl-2">
-      <div><span class="text-secondary">frontend:</span>  React, TypeScript, HTMX, Tailwind CSS</div>
-      <div><span class="text-secondary">backend:</span>   Go, Node.js, Bun, REST, gRPC</div>
-      <div><span class="text-secondary">tools:</span>     Neovim, Tmux, Git, Docker, Linux</div>
-      <div><span class="text-secondary">databases:</span> PostgreSQL, MongoDB, Redis</div>
-    </div>`,
-				"contact.txt": `<div class="text-on-surface-variant/90 space-y-1 pl-2">
-      <div><span class="text-secondary">email:</span>    begenchgeldyev@gmail.com</div>
-      <div><span class="text-secondary">github:</span>   github.com/begenchgeldyev</div>
-      <div><span class="text-secondary">linkedin:</span> linkedin.com/in/begench-geldyev</div>
-    </div>`,
-			};
+  // Single source of truth for `open` targets; Tab completion reads the same table.
+  const LINKS = {
+    github: 'https://github.com/begenchgeldyev',
+    linkedin: 'https://linkedin.com/in/begench-geldyev',
+    cv: '/public/Begench%20Geldyev(CV).pdf',
+  };
 
-			const LS_OUTPUT = `<div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 text-on-surface-variant/80 pl-2 space-y-0.5">
-      <span>drwxr-xr-x  root  philosophy.txt</span>
-      <span>drwxr-xr-x  root  skills.txt</span>
-      <span>drwxr-xr-x  root  contact.txt</span>
-      <span>drwxr-xr-x  root  experiments/</span>
-    </div>`;
+  function escapeText(value) {
+    return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
 
-			// Single source of truth for `open` targets; Tab completion reads the same table.
-			const LINKS = {
-				github: "https://github.com/begenchgeldyev",
-				linkedin: "https://linkedin.com/in/begench-geldyev",
-				cv: "/public/Begench%20Geldyev(CV).pdf",
-			};
+  function chat(message) {
+    const turn = { text: '', follow: nearBottom() };
+    currentTurn = turn;
+    input.readOnly = true;
+    input.placeholder = copy.waiting;
+    input.setAttribute('aria-busy', 'true');
+    prompt.hidden = true;
+    loader.hidden = false;
+    status.textContent = copy.waiting;
 
-			function escapeText(value) {
-				return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-			}
+    function settle(error = null) {
+      if (currentTurn !== turn) return;
+      const follow = turn.follow && nearBottom();
+      const previousTop = body.scrollTop;
+      currentTurn = null;
+      const line = document.createElement('div');
+      line.className = 'pb-1 mt-2 text-on-surface-variant/90';
+      const speaker = document.createElement('span');
+      speaker.className = 'sr-only';
+      speaker.textContent = copy.assistant;
+      const answer = document.createElement('span');
+      answer.className = error ? 'text-error/80' : 'whitespace-pre-wrap';
+      answer.setAttribute(error ? 'data-chat-error' : 'data-answer', '');
+      answer.textContent = error || turn.text;
+      line.append(speaker, answer);
+      body.insertBefore(line, inputLine);
+      loader.hidden = true;
+      prompt.hidden = false;
+      input.readOnly = false;
+      input.placeholder = '';
+      input.removeAttribute('aria-busy');
+      input.value = error ? message : '';
+      status.textContent = error || copy.ready;
+      busy = false;
+      // Reveal the beginning of a long answer, not its end. Never scroll the page.
+      const lineTop = line.getBoundingClientRect().top - body.getBoundingClientRect().top + previousTop;
+      body.scrollTop = follow ? Math.min(lineTop, Math.max(previousTop, body.scrollHeight - body.clientHeight)) : previousTop;
+    }
 
-			function askQuestion(question) {
-				if (!question) return err("ask: usage — ask [question], e.g. ask what did you build at Synecta?");
-				const assistant = window.askChat;
-				if (!assistant) return err("ask: assistant is unavailable");
-				if (assistant.busy()) return err("ask: still answering…");
+    try {
+      const request = window.askChat.ask(message, {
+        onText(text) {
+          if (currentTurn === turn && typeof text === 'string') turn.text = text;
+        },
+        onDone() {
+          settle(turn.text.trim() ? null : copy.unavailable);
+        },
+        onError(message) {
+          settle(
+            message === 'rate limit reached, try again in a few minutes'
+              ? copy.rate
+              : message === 'questions are limited to 500 characters'
+                ? copy.length
+                : copy.unavailable,
+          );
+        },
+      });
+      // Catch rejection, synchronous failure, or a transport resolving without a terminal callback.
+      Promise.resolve(request).then(
+        () => settle(copy.unavailable),
+        () => settle(copy.unavailable),
+      );
+    } catch {
+      settle(copy.unavailable);
+    }
+    return null;
+  }
 
-				const line = document.createElement("div");
-				line.className = "pb-1 pl-2 text-on-surface-variant/90";
-				line.innerHTML =
-					'<span class="text-secondary font-bold">assistant:</span> <span class="whitespace-pre-wrap" data-answer></span><span class="blinking-cursor"></span>';
-				body.insertBefore(line, inputLine);
-				body.scrollTop = body.scrollHeight;
-				const answer = line.querySelector("[data-answer]");
-				const cursor = line.querySelector(".blinking-cursor");
+  const COMMANDS = {
+    help() {
+      const row = (cmd, desc) =>
+        `<div><span class="text-primary-container">${cmd.padEnd(26)}</span><span class="text-on-surface-variant/90">${desc}</span></div>`;
+      return (
+        `<div class="terminal-help pl-2 space-y-2">` +
+        row('help', 'show this message') +
+        row('whoami', 'about me') +
+        row('ls', 'list files') +
+        row('cat [file]', 'read a file') +
+        row('uptime', 'system uptime') +
+        row('projects', 'go to projects') +
+        row('logs', 'go to logs') +
+        row('open [github|linkedin|cv]', 'open link') +
+        row('clear', 'clear terminal') +
+        `</div>`
+      );
+    },
 
-				assistant.ask(question, {
-					onText(text) {
-						answer.textContent = text;
-						body.scrollTop = body.scrollHeight;
-					},
-					onDone() {
-						cursor.remove();
-					},
-					onError(message) {
-						const error = document.createElement("span");
-						error.className = "text-error/80";
-						error.textContent = `ask: ${message}`;
-						line.replaceChildren(error);
-						body.scrollTop = body.scrollHeight;
-					},
-				});
-				return null;
-			}
+    whoami() {
+      return `<div class="text-on-surface-variant/90 space-y-1 pl-2">
+		      <div><span class="text-secondary font-bold">NAME:&nbsp;&nbsp;</span> Begench Geldyev / Software Engineer</div>
+		      <div><span class="text-secondary font-bold">FOCUS:&nbsp;</span> React, TypeScript, Go, web performance</div>
+		      <div><span class="text-secondary font-bold">ENV:&nbsp;&nbsp;&nbsp;</span> Neovim + Tmux + Linux</div>
+		      <div><span class="text-secondary font-bold">STATUS:</span> Building high-fidelity interfaces &amp; backend systems.</div>
+		    </div>`;
+    },
 
-			const COMMANDS = {
-				help() {
-					const row = (cmd, desc) =>
-						`<div><span class="text-primary-container">${cmd.padEnd(26)}</span><span class="text-on-surface-variant/90">${desc}</span></div>`;
-					return (
-						`<div class="terminal-help pl-2 space-y-2">` +
-						row("help", "show this message") +
-						row("whoami", "about me") +
-						row("ask [question]", "ask an AI about my experience") +
-						row("ls", "list files") +
-						row("cat [file]", "read a file") +
-						row("uptime", "system uptime") +
-						row("projects", "go to projects") +
-						row("logs", "go to logs") +
-						row("open [github|linkedin|cv]", "open link") +
-						row("clear", "clear terminal") +
-						`</div>`
-					);
-				},
+    ls() {
+      return LS_OUTPUT;
+    },
 
-				whoami() {
-					return `<div class="text-on-surface-variant/90 space-y-1 pl-2">
-      <div><span class="text-secondary font-bold">NAME:&nbsp;&nbsp;</span> Begench Geldyev / Software Engineer</div>
-      <div><span class="text-secondary font-bold">FOCUS:&nbsp;</span> React, TypeScript, Go, web performance</div>
-      <div><span class="text-secondary font-bold">ENV:&nbsp;&nbsp;&nbsp;</span> Neovim + Tmux + Linux</div>
-      <div><span class="text-secondary font-bold">STATUS:</span> Building high-fidelity interfaces &amp; backend systems.</div>
-    </div>`;
-				},
+    cat(args) {
+      const file = args[0];
+      if (!file) return err('cat: missing operand');
+      if (Object.hasOwn(FILES, file)) return FILES[file];
+      return err(`cat: ${file}: No such file or directory`);
+    },
 
-				ask(args) {
-					return askQuestion(args.join(" "));
-				},
+    uptime() {
+      const s = Math.floor(performance.now() / 1000);
+      const h = Math.floor(s / 3600),
+        m = Math.floor((s % 3600) / 60),
+        sec = s % 60;
+      return `<span class="text-on-surface-variant/80 pl-2">${new Date().toLocaleTimeString()} up ${h}h ${m}m ${sec}s, 1 user, load average: 0.42, 0.31, 0.18</span>`;
+    },
 
-				ls() {
-					return LS_OUTPUT;
-				},
+    clear() {
+      [...body.children].forEach((el) => {
+        if (el !== inputLine) el.remove();
+      });
+      status.textContent = '';
+      return null;
+    },
 
-				cat(args) {
-					const file = args[0];
-					if (!file) return err("cat: missing operand");
-					if (Object.hasOwn(FILES, file)) return FILES[file];
-					return err(`cat: ${file}: No such file or directory`);
-				},
+    projects() {
+      setTimeout(() => (window.location.href = '/projects'), 300);
+      return '<span class="text-primary-container/70 pl-2">Navigating to /projects...</span>';
+    },
 
-				uptime() {
-					const s = Math.floor(performance.now() / 1000);
-					const h = Math.floor(s / 3600),
-						m = Math.floor((s % 3600) / 60),
-						sec = s % 60;
-					return `<span class="text-on-surface-variant/80 pl-2">${new Date().toLocaleTimeString()} up ${h}h ${m}m ${sec}s, 1 user, load average: 0.42, 0.31, 0.18</span>`;
-				},
+    logs() {
+      setTimeout(() => (window.location.href = '/logs'), 300);
+      return '<span class="text-primary-container/70 pl-2">Navigating to /logs...</span>';
+    },
 
-				clear() {
-					[...body.children].forEach((el) => {
-						if (el !== inputLine) el.remove();
-					});
-					setTimeout(() => input.focus(), 0);
-					return null;
-				},
+    open(args) {
+      const target = args[0];
+      if (!target) return err('open: specify target — github | linkedin | cv');
+      if (!Object.hasOwn(LINKS, target)) return err(`open: unknown target '${target}'`);
+      window.open(LINKS[target], '_blank');
+      return `<span class="text-primary-container/70 pl-2">Opening ${target}...</span>`;
+    },
+  };
 
-				projects() {
-					setTimeout(() => (window.location.href = "/projects"), 300);
-					return '<span class="text-primary-container/70 pl-2">Navigating to /projects...</span>';
-				},
+  function err(msg) {
+    return `<span class="text-error/80 pl-2">${escapeText(msg)}</span>`;
+  }
 
-				logs() {
-					setTimeout(() => (window.location.href = "/logs"), 300);
-					return '<span class="text-primary-container/70 pl-2">Navigating to /logs...</span>';
-				},
+  function appendLine(html) {
+    const follow = nearBottom();
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    // insert before the input line so input stays at the bottom
+    body.insertBefore(div, inputLine);
+    if (follow) body.scrollTop = body.scrollHeight;
+  }
 
-				open(args) {
-					const target = args[0];
-					if (!target) return err("open: specify target — github | linkedin | cv");
-					if (!Object.hasOwn(LINKS, target)) return err(`open: unknown target '${target}'`);
-					window.open(LINKS[target], "_blank");
-					return `<span class="text-primary-container/70 pl-2">Opening ${target}...</span>`;
-				},
-			};
+  function run(raw) {
+    const trimmed = raw.trim();
+    if (!trimmed || busy) return;
 
-			function err(msg) {
-				return `<span class="text-error/80 pl-2">${escapeText(msg)}</span>`;
-			}
+    const [cmd, ...args] = trimmed.split(/\s+/);
+    const fn = Object.hasOwn(COMMANDS, cmd) ? COMMANDS[cmd] : null;
+    const manual = fn && (args.length === 0 || ((cmd === 'cat' || cmd === 'open') && args.length === 1));
+    if (!manual && !window.askChat) {
+      appendLine(`<div class="text-error/80">${copy.unavailable}</div>`);
+      status.textContent = copy.unavailable;
+      return;
+    }
+    if (!manual && window.askChat.busy()) {
+      status.textContent = copy.waiting;
+      return;
+    }
+    busy = true; // Lock before echo/history/clear, even if SDK status has not changed yet.
+    history.unshift(raw);
+    histIdx = -1;
+    input.value = '';
+    document.getElementById('terminal-intro')?.remove();
+    appendLine(
+      `<div class="flex items-baseline gap-x-2 mt-2" data-user-message>${PROMPT} <span class="text-white min-w-0 flex-1">${escapeText(trimmed)}</span></div>`,
+    );
 
-			function appendLine(html) {
-				const div = document.createElement("div");
-				div.innerHTML = html;
-				// insert before the input line so input stays at the bottom
-				body.insertBefore(div, inputLine);
-				body.scrollTop = body.scrollHeight;
-			}
+    // Only literal manual command syntax dispatches commands. Sentences such
+    // as "projects you built?" must never cause navigation or link opening.
+    if (!manual) {
+      chat(trimmed);
+      return;
+    }
+    try {
+      const output = fn(args);
+      if (output !== null && output !== undefined) appendLine(`<div class="pb-1">${output}</div>`);
+    } finally {
+      busy = false;
+      status.textContent = '';
+    }
+  }
 
-			function run(raw) {
-				const trimmed = raw.trim();
+  // Locate the whitespace-delimited token around the caret without normalising
+  // the line, so completion can splice one token and keep every other byte.
+  function tokenAtCaret(value, caret) {
+    const isSpace = (char) => char === ' ' || char === '\t';
+    const pos = Math.max(0, Math.min(caret, value.length));
+    let start;
+    let end;
 
-				// always echo the prompt + command (even blank Enter)
-				appendLine(`<div class="flex flex-wrap gap-x-2 mt-2">${PROMPT} <span class="text-white min-w-0">${escapeText(trimmed)}</span></div>`);
-				if (!trimmed) return;
+    if (pos > 0 && !isSpace(value[pos - 1])) {
+      start = pos - 1;
+      while (start > 0 && !isSpace(value[start - 1])) start--;
+      end = pos;
+      while (end < value.length && !isSpace(value[end])) end++;
+    } else if (pos < value.length && !isSpace(value[pos])) {
+      start = pos;
+      end = pos;
+      while (end < value.length && !isSpace(value[end])) end++;
+    } else {
+      start = pos;
+      end = pos;
+    }
 
-				const [cmd, ...args] = trimmed.split(/\s+/);
-				const fn = Object.hasOwn(COMMANDS, cmd) ? COMMANDS[cmd] : null;
-				let output;
+    const preceding = value.slice(0, start).match(/\S+/g) ?? [];
+    return { start, end, token: value.slice(start, end), index: preceding.length };
+  }
 
-				// Only literal manual command syntax dispatches commands. Sentences such
-				// as "projects you built?" must never cause navigation or link opening.
-				if (cmd === "ask") {
-					output = askQuestion(trimmed.slice(cmd.length).trim());
-				} else if (fn && (args.length === 0 || ((cmd === "cat" || cmd === "open") && args.length === 1))) {
-					output = fn(args);
-				} else {
-					output = askQuestion(trimmed);
-				}
+  function commonPrefix(values) {
+    return values.reduce((prefix, value) => {
+      let i = 0;
+      while (i < prefix.length && i < value.length && prefix[i] === value[i]) i++;
+      return prefix.slice(0, i);
+    });
+  }
 
-				if (output !== null && output !== undefined) {
-					appendLine(`<div class="pb-1">${output}</div>`);
-				}
-			}
+  function complete() {
+    const value = input.value;
+    const caret = typeof input.selectionStart === 'number' ? input.selectionStart : value.length;
+    const { start, end, token, index } = tokenAtCaret(value, caret);
+    const command = value.trim().split(/\s+/, 1)[0];
+    let candidates = null;
 
-			// Locate the whitespace-delimited token around the caret without normalising
-			// the line, so completion can splice one token and keep every other byte.
-			function tokenAtCaret(value, caret) {
-				const isSpace = (char) => char === " " || char === "\t";
-				const pos = Math.max(0, Math.min(caret, value.length));
-				let start;
-				let end;
+    if (index === 0) candidates = Object.keys(COMMANDS);
+    else if (index === 1 && command === 'cat') candidates = Object.keys(FILES);
+    else if (index === 1 && command === 'open') candidates = Object.keys(LINKS);
+    if (!candidates) return;
 
-				if (pos > 0 && !isSpace(value[pos - 1])) {
-					start = pos - 1;
-					while (start > 0 && !isSpace(value[start - 1])) start--;
-					end = pos;
-					while (end < value.length && !isSpace(value[end])) end++;
-				} else if (pos < value.length && !isSpace(value[pos])) {
-					start = pos;
-					end = pos;
-					while (end < value.length && !isSpace(value[end])) end++;
-				} else {
-					start = pos;
-					end = pos;
-				}
+    const matches = candidates.filter((candidate) => candidate.startsWith(token));
+    if (matches.length === 0) return;
+    if (matches.length === 1 && matches[0] === token) return;
 
-				const preceding = value.slice(0, start).match(/\S+/g) ?? [];
-				return { start, end, token: value.slice(start, end), index: preceding.length };
-			}
+    const replacement = matches.length === 1 ? matches[0] : commonPrefix(matches);
+    if (replacement !== token) {
+      input.value = value.slice(0, start) + replacement + value.slice(end);
+      const nextCaret = start + replacement.length;
+      if (input.setSelectionRange) input.setSelectionRange(nextCaret, nextCaret);
+    }
 
-			function commonPrefix(values) {
-				return values.reduce((prefix, value) => {
-					let i = 0;
-					while (i < prefix.length && i < value.length && prefix[i] === value[i]) i++;
-					return prefix.slice(0, i);
-				});
-			}
+    if (matches.length > 1) {
+      const echoed = escapeText(value.slice(0, start + token.length));
+      appendLine(`<div class="flex flex-wrap gap-x-2 mt-2">${PROMPT} <span class="text-white min-w-0">${echoed}</span></div>`);
+      appendLine(`<div class="text-on-surface-variant/70 pl-2 pb-1">${matches.join('  ')}</div>`);
+    }
+  }
 
-			function complete() {
-				const value = input.value;
-				const caret = typeof input.selectionStart === "number" ? input.selectionStart : value.length;
-				const { start, end, token, index } = tokenAtCaret(value, caret);
-				const command = value.trim().split(/\s+/, 1)[0];
-				let candidates = null;
-
-				if (index === 0) candidates = Object.keys(COMMANDS);
-				else if (index === 1 && command === "cat") candidates = Object.keys(FILES);
-				else if (index === 1 && command === "open") candidates = Object.keys(LINKS);
-				if (!candidates) return;
-
-				const matches = candidates.filter((candidate) => candidate.startsWith(token));
-				if (matches.length === 0) return;
-				if (matches.length === 1 && matches[0] === token) return;
-
-				const replacement = matches.length === 1 ? matches[0] : commonPrefix(matches);
-				if (replacement !== token) {
-					input.value = value.slice(0, start) + replacement + value.slice(end);
-					const nextCaret = start + replacement.length;
-					if (input.setSelectionRange) input.setSelectionRange(nextCaret, nextCaret);
-					syncDisplay();
-				}
-
-				if (matches.length > 1) {
-					const echoed = escapeText(value.slice(0, start + token.length));
-					appendLine(`<div class="flex flex-wrap gap-x-2 mt-2">${PROMPT} <span class="text-white min-w-0">${echoed}</span></div>`);
-					appendLine(`<div class="text-on-surface-variant/70 pl-2 pb-1">${matches.join("  ")}</div>`);
-				}
-			}
-
-			input.addEventListener("input", syncDisplay);
-
-			input.addEventListener("keydown", (e) => {
-				if (e.key === "Enter") {
-					const val = input.value;
-					history.unshift(val);
-					histIdx = -1;
-					input.value = "";
-					syncDisplay();
-					run(val);
-				} else if (e.key === "ArrowUp") {
-					e.preventDefault();
-					if (histIdx < history.length - 1) histIdx++;
-					input.value = history[histIdx] ?? "";
-					syncDisplay();
-				} else if (e.key === "ArrowDown") {
-					e.preventDefault();
-					if (histIdx > 0) histIdx--;
-					else {
-						histIdx = -1;
-						input.value = "";
-						syncDisplay();
-						return;
-					}
-					input.value = history[histIdx] ?? "";
-					syncDisplay();
-				} else if (e.key === "Tab" && !e.shiftKey) {
-					e.preventDefault();
-					complete();
-				} else if (e.key === "l" && e.ctrlKey) {
-					e.preventDefault();
-					COMMANDS.clear();
-				}
-			});
-		})();
-		</script>
+  input.addEventListener('keydown', (e) => {
+    if (e.isComposing || e.keyCode === 229) return;
+    if (busy) {
+      if (['Enter', 'ArrowUp', 'ArrowDown'].includes(e.key) || (e.key === 'l' && e.ctrlKey)) e.preventDefault();
+      return; // Native Tab/Shift+Tab and fullscreen Escape remain available.
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      run(input.value);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (histIdx < history.length - 1) histIdx++;
+      input.value = history[histIdx] ?? '';
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (histIdx > 0) histIdx--;
+      else {
+        histIdx = -1;
+        input.value = '';
+        return;
+      }
+      input.value = history[histIdx] ?? '';
+    } else if (e.key === 'Tab' && !e.shiftKey) {
+      e.preventDefault();
+      complete();
+    } else if (e.key === 'l' && e.ctrlKey) {
+      e.preventDefault();
+      COMMANDS.clear();
+    }
+  });
+})();
+</script>

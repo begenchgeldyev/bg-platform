@@ -109,7 +109,12 @@ try {
             (element) => getComputedStyle(element as Element).viewTransitionName,
           ),
         ),
-        ['none', 'none'],
+        ['page-content', 'site-header'],
+      );
+      assert.equal(
+        await page.evaluate(() => getComputedStyle(document.documentElement, '::view-transition-new(site-header)').animationName),
+        'none',
+        'the separately captured header stays still',
       );
       assert.equal(await page.locator('html').getAttribute('lang'), lang);
       await page.locator('header a[href="/logs"]').click();
@@ -121,7 +126,7 @@ try {
       await page.locator('header a[href="/"]').click();
       await page.waitForURL(`${baseURL}/`);
       await page.waitForFunction(() => !window.transitionEvidence?.native || window.transitionEvidence.finished);
-      await page.locator('#terminal-wrap').click();
+      await page.locator('#input-line').click();
       assert.equal(await page.locator('#terminal-input').evaluate((input: Element) => document.activeElement === input), true);
       await page.locator('#terminal-input').fill('help');
       await page.locator('#terminal-input').press('Enter');
@@ -130,6 +135,8 @@ try {
       await page.locator(`[data-lang="${other}"]`).focus();
       await page.keyboard.press('Enter');
       await page.waitForFunction((expected: string) => document.documentElement.lang === expected, other);
+      // The new html lang is parsed before blocking head assets and the body.
+      await page.locator('h1').waitFor({ state: 'visible' });
       assert.equal(await page.locator('h1').count(), 1);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       report.push({ lang, viewport, evidence, errors, consoleErrors });
@@ -269,7 +276,7 @@ try {
     await page.screenshot({ path: `${output}/transition-unsupported.png` });
     await page.goBack();
     await page.waitForURL(`${baseURL}/`);
-    await page.locator('#terminal-wrap').click();
+    await page.locator('#input-line').click();
     assert.equal(await page.locator('#terminal-input').evaluate((input: Element) => document.activeElement === input), true);
     console.log('PASS simulated unsupported-rule ordinary navigation/history/terminal fallback');
   } finally {

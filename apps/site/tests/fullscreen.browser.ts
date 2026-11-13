@@ -7,10 +7,17 @@ const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PAT
 const baseURL = process.env.SITE_URL || 'http://localhost:8625';
 const output = process.env.EVIDENCE_DIR || '/tmp/opencode/page-transitions';
 await mkdir(output, { recursive: true });
+let unexpectedAskRequests = 0;
+const blockAsk = (context: { route(pattern: string, handler: (route: { abort(): Promise<void> }) => Promise<void>): Promise<void> }) =>
+  context.route('**/api/ask', (route) => {
+    unexpectedAskRequests++;
+    return route.abort();
+  });
 try {
   for (const lang of ['en', 'ru']) {
     for (const width of [1440, 390]) {
       const context = await browser.newContext({ baseURL, viewport: { width, height: 900 }, isMobile: width < 600, hasTouch: width < 600 });
+      await blockAsk(context);
       await context.addCookies([{ name: 'lang', value: lang, url: baseURL }]);
       const page = await context.newPage();
       const errors: string[] = [];
@@ -39,7 +46,7 @@ try {
       await page.keyboard.type('cat phi');
       await page.locator('#terminal-input').press('Tab');
       assert.equal(await page.locator('#terminal-input').inputValue(), 'cat philosophy.txt');
-      assert.equal(await page.locator('#terminal-display').textContent(), 'cat philosophy.txt');
+      assert.equal(await page.locator('#terminal-input').isVisible(), true, 'completed command is in the real visible input');
       // Completion must not trap the keyboard away from the fullscreen control.
       await page.keyboard.press('Shift+Tab');
       assert.equal(
@@ -73,16 +80,18 @@ try {
     }
   }
   const unsupported = await browser.newContext({ baseURL });
+  await blockAsk(unsupported);
   await unsupported.addInitScript(() => Object.defineProperty(document, 'fullscreenEnabled', { value: false }));
   const fallback = await unsupported.newPage();
   await fallback.goto('/', { waitUntil: 'domcontentloaded' });
   assert.equal(await fallback.locator('[data-terminal-toolbar]').isVisible(), false);
-  await fallback.locator('#terminal-wrap').click();
+  await fallback.locator('#input-line').click();
   assert.equal(await fallback.locator('#terminal-input').evaluate((input: Element) => document.activeElement === input), true);
   await unsupported.close();
   console.log('PASS unsupported Fullscreen API hides the unavailable control; terminal remains usable');
 
   const rejected = await browser.newContext({ baseURL });
+  await blockAsk(rejected);
   await rejected.addInitScript(() => {
     Element.prototype.requestFullscreen = () => Promise.reject(new DOMException('Denied', 'NotAllowedError'));
   });
@@ -98,6 +107,7 @@ try {
   assert.deepEqual(errors, []);
   await rejected.close();
   console.log('PASS rejected fullscreen request is announced without a stuck state or unhandled error');
+  assert.equal(unexpectedAskRequests, 0, 'manual completion never reaches the AI endpoint');
 } finally {
   await browser.close();
 }

@@ -9,8 +9,36 @@ html {
   @view-transition {
     navigation: auto;
   }
-  main {
+  /* A viewport snapshot preserves the outgoing page's size and scroll position.
+     Matching differently sized main elements stretches/repositions the old image. */
+  html {
     view-transition-name: page-content;
+  }
+  body > header {
+    view-transition-name: site-header;
+  }
+  body > footer {
+    view-transition-name: site-footer;
+  }
+  body > .fixed {
+    view-transition-name: site-frame;
+  }
+  /* These were outside the main-only fade; keep them stationary and show only
+     their incoming state, without the browser's default group morph/crossfade. */
+  ::view-transition-group(site-header),
+  ::view-transition-group(site-footer),
+  ::view-transition-group(site-frame) {
+    animation: none;
+  }
+  ::view-transition-old(site-header),
+  ::view-transition-old(site-footer),
+  ::view-transition-old(site-frame) {
+    display: none;
+  }
+  ::view-transition-new(site-header),
+  ::view-transition-new(site-footer),
+  ::view-transition-new(site-frame) {
+    animation: none;
   }
   ::view-transition-group(page-content) {
     animation: none;

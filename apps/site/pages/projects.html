@@ -1,6 +1,6 @@
-<main class="max-w-6xl mx-auto px-8 py-20 min-h-screen">
+<main class="max-w-6xl mx-auto px-5 sm:px-8 py-12 md:py-16">
   <!-- Page Header -->
-  <div class="mb-16 border-b border-outline-variant/70 pb-10">
+  <div class="mb-8 border-b border-outline-variant/70 pb-8">
     <div class="max-w-3xl space-y-5">
       <div class="inline-flex items-center gap-3 font-mono text-[11px] font-bold uppercase tracking-[0.32em] text-primary-container">
         <span class="h-px w-10 bg-primary-container/80"></span>
@@ -16,9 +16,20 @@
   </div>
 
   <!-- Projects Grid -->
-  <div class="grid grid-cols-1 md:grid-cols-12 gap-6" hx-get="/api/projects" hx-trigger="load" hx-swap="innerHTML">
-    <div class="md:col-span-12 flex items-center justify-center py-20">
-      <span class="font-mono text-on-surface-variant text-sm">Loading projects<span class="blinking-cursor"></span></span>
-    </div>
+  <div
+    id="project-gallery"
+    class="project-gallery"
+    aria-busy="true"
+    hx-get="/api/projects"
+    hx-trigger="load, projects:retry"
+    hx-swap="innerHTML">
+    <div class="project-loading py-12 text-on-surface-variant text-sm" data-project-loading role="status">Loading projects…</div>
   </div>
+  <div id="project-load-error" class="border border-outline-variant/40 p-6" hidden>
+    <p role="status" class="text-on-surface-variant text-sm">Projects couldn't load. Please try again.</p>
+    <button id="project-retry" type="button" class="mt-4 min-h-11 border border-primary-container px-4 text-sm text-primary-container">
+      Try again
+    </button>
+  </div>
+  <!--#include projects/gallery.html-->
 </main>

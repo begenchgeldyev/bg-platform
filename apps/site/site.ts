@@ -32,6 +32,7 @@ const MIME: Record<string, string> = {
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
   '.ttf': 'font/ttf',
+  '.webp': 'image/webp',
   '.woff2': 'font/woff2',
 };
 

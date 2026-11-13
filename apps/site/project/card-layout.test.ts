@@ -1,36 +1,22 @@
 import { describe, expect, test } from 'bun:test';
-import { cardColSpans } from './card-layout';
 
-const approvedLayouts: Record<number, number[]> = {
-  1: [12],
-  2: [8, 4],
-  3: [8, 4, 12],
-  4: [8, 4, 6, 6],
-  5: [8, 4, 4, 4, 4],
-  6: [8, 4, 6, 6, 6, 6],
-};
-
-describe('cardColSpans', () => {
-  test('matches the approved layout for totals 1 to 6', () => {
-    for (const [total, spans] of Object.entries(approvedLayouts)) {
-      expect(cardColSpans(Number(total))).toEqual(spans);
+describe('approved project covers layout', () => {
+  test('both language pages use the same uniform gallery, not ordinal bento spans', async () => {
+    for (const name of ['projects.html', 'projects.ru.html']) {
+      const html = await Bun.file(new URL(`../pages/${name}`, import.meta.url)).text();
+      expect(html).toContain('class="project-gallery"');
+      expect(html).toContain('projects/gallery.html');
+      expect(html).not.toContain('md:grid-cols-12');
+      expect(html).not.toContain('min-h-screen');
     }
   });
 
-  test('packs every total from 1 to 10 into full 12-column rows', () => {
-    for (let total = 1; total <= 10; total += 1) {
-      const spans = cardColSpans(total);
-      expect(spans).toHaveLength(total);
-
-      let row = 0;
-      for (const span of spans) {
-        row += span;
-        expect(row).toBeLessThanOrEqual(12);
-        if (row === 12) {
-          row = 0;
-        }
-      }
-      expect(row).toBe(0);
-    }
+  test('covers have native 4:3 space, full-color art and solid readable panels', async () => {
+    const html = await Bun.file(new URL('../components/projects/gallery.html', import.meta.url)).text();
+    expect(html).toContain('repeat(3, minmax(0, 1fr))');
+    expect(html).toContain('aspect-ratio: 4 / 3');
+    expect(html).toContain('image-rendering: pixelated');
+    expect(html).toContain('.project-card:focus-within');
+    expect(html).not.toMatch(/grayscale|line-clamp|scale\(/);
   });
 });

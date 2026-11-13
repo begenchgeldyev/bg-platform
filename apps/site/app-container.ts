@@ -1,8 +1,8 @@
-import { openai } from '@ai-sdk/openai';
 import { Container, canAccess, db, ProjectsRepository, resolveEmail, sessionEmail } from '@bg/core';
 import { AdminController } from './admin/admin.controller';
 import { AskController } from './ask/ask.controller';
 import { loadCvText } from './ask/cv-knowledge';
+import { createAskModel } from './ask/model-config';
 import { AuthController } from './auth/auth.controller';
 import { createRateLimiter } from './http/rate-limit';
 import { type CanEditProjects, ProjectController } from './project/project.controller';
@@ -36,7 +36,7 @@ container.registerFactory(AdminController, (c) => {
 
 container.registerFactory(AskController, (c) => {
   return new AskController({
-    model: process.env.OPENAI_API_KEY ? openai(process.env.OPENAI_MODEL || 'gpt-5.4-mini') : null,
+    model: createAskModel(),
     rateLimiter: createRateLimiter({ limit: 10, windowMs: 10 * 60 * 1000 }),
     loadCvText,
     listPublicProjects: () => c.resolve(ProjectsRepository).list({ includeHidden: false }),

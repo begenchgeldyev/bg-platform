@@ -1,0 +1,248 @@
+<style>
+.project-gallery {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  align-items: stretch;
+}
+.project-empty,
+.project-loading {
+  grid-column: 1 / -1;
+}
+.project-loading {
+  /* Reserve the pending viewport so HTMX insertion cannot pull a visible footer away.
+     Removed with the loading state; actual cards have no imposed minimum height. */
+  min-height: 70vh;
+}
+.project-card {
+  min-width: 0;
+  border: 1px solid #30372e;
+  background: #101311;
+}
+.project-card:hover,
+.project-card:focus-within {
+  border-color: #00ff41;
+}
+.project-card-link {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  color: inherit;
+  text-decoration: none;
+}
+.project-card-link:focus-visible {
+  outline: 2px solid #00ff41;
+  outline-offset: 4px;
+}
+.project-cover {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: #111c28;
+  border-bottom: 1px solid #30372e;
+}
+.project-cover-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 23px, #82988812 23px 24px),
+    repeating-linear-gradient(90deg, transparent 0 23px, #82988812 23px 24px);
+  color: #829888;
+}
+.project-cover-fallback .material-symbols-outlined {
+  font-size: 48px;
+}
+.project-cover picture {
+  position: absolute;
+  inset: 0;
+}
+.project-cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  background: #111c28;
+}
+.project-cover img:not([data-loaded]) {
+  visibility: hidden;
+}
+.project-cover picture[hidden] {
+  display: none;
+}
+.project-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 24px;
+  overflow-wrap: anywhere;
+}
+.project-card-body h2 {
+  margin: 0 0 18px;
+  color: #f2f1f0;
+  font-size: 27px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -1px;
+}
+.project-card-body > span:first-child:not(.project-card-action) {
+  margin-bottom: 12px;
+}
+.project-description {
+  margin: 0 0 22px;
+  font-size: 14px;
+  line-height: 1.85;
+  color: #d1decb;
+}
+.project-technologies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  list-style: none;
+  margin: 0 0 28px;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #a4b59f;
+}
+.project-technologies li {
+  min-width: 0;
+}
+.project-card-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: auto;
+  min-height: 44px;
+  border-bottom: 1px solid #436b43;
+  font-size: 13px;
+  color: #00ff41;
+}
+.project-card-link:hover .project-card-action {
+  border-color: #00ff41;
+}
+@media (max-width: 1023px) {
+  .project-gallery {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 639px) {
+  .project-gallery {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .project-card-body {
+    padding: 22px 20px;
+  }
+  .project-card-body h2 {
+    font-size: 26px;
+  }
+}
+</style>
+<script>
+(() => {
+  const gallery = document.getElementById('project-gallery');
+  const error = document.getElementById('project-load-error');
+  const retry = document.getElementById('project-retry');
+  const errorStatus = error?.querySelector('[role="status"]');
+  if (!gallery || !error || !retry || !errorStatus) return;
+  const errorText = errorStatus.textContent;
+  const loadingText = gallery.querySelector('[data-project-loading]').textContent.trim();
+  let retrying = false;
+  function loadImage(image) {
+    const source = image.closest('picture').querySelector('source[data-srcset]');
+    if (source) source.srcset = source.dataset.srcset;
+    image.src = image.dataset.src;
+  }
+  const observer =
+    'IntersectionObserver' in window
+      ? new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (!entry.isIntersecting) return;
+              observer.unobserve(entry.target);
+              loadImage(entry.target.querySelector('[data-project-cover]'));
+            });
+          },
+          { rootMargin: '200px 0px' },
+        )
+      : null;
+  function prepareCovers() {
+    // HTMX can finish a no-swap response too; do not erase its error state.
+    if (gallery.querySelector('[data-project-loading]')) return;
+    gallery.setAttribute('aria-busy', 'false');
+    gallery.querySelectorAll('[data-project-cover]:not([src])').forEach((image) => {
+      // The picture has reserved geometry even while its undecoded image is invisible.
+      if (observer) observer.observe(image.closest('picture'));
+      else loadImage(image);
+    });
+    if (retrying) gallery.querySelector('a, .project-empty')?.focus();
+    error.hidden = true;
+    retrying = false;
+  }
+  gallery.addEventListener('htmx:after:swap', prepareCovers);
+  gallery.addEventListener(
+    'load',
+    async (event) => {
+      const image = event.target;
+      if (!image.matches?.('[data-project-cover]')) return;
+      const source = image.currentSrc;
+      try {
+        await image.decode();
+        if (image.currentSrc === source && image.naturalWidth > 0) image.dataset.loaded = 'true';
+      } catch {
+        // The error handler retains the placeholder and retries PNG when available.
+      }
+    },
+    true,
+  );
+  gallery.addEventListener(
+    'error',
+    (event) => {
+      const image = event.target;
+      if (!image.matches?.('[data-project-cover]')) return;
+      delete image.dataset.loaded;
+      const picture = image.closest('picture');
+      const source = picture.querySelector('source');
+      if (source) {
+        source.remove();
+        image.src = image.dataset.src;
+      } else {
+        picture.hidden = true;
+      }
+    },
+    true,
+  );
+  function showError() {
+    gallery.setAttribute('aria-busy', 'false');
+    const loading = gallery.querySelector('[data-project-loading]');
+    if (loading) loading.hidden = true;
+    error.hidden = false;
+    errorStatus.textContent = errorText;
+    retry.removeAttribute('aria-disabled');
+    retrying = false;
+  }
+  gallery.addEventListener('htmx:response:error', showError);
+  gallery.addEventListener('htmx:error', showError);
+  retry.addEventListener('mousedown', (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    retryProjects();
+  });
+  retry.addEventListener('click', (event) => {
+    if (event.detail === 0) retryProjects();
+  });
+  function retryProjects() {
+    if (retrying) return;
+    retrying = true;
+    // Keep the control focused and the compact error panel stable while waiting.
+    errorStatus.style.minHeight = `${errorStatus.getBoundingClientRect().height}px`;
+    errorStatus.textContent = loadingText;
+    retry.setAttribute('aria-disabled', 'true');
+    gallery.setAttribute('aria-busy', 'true');
+    gallery.dispatchEvent(new Event('projects:retry'));
+  }
+})();
+</script>
