@@ -15,6 +15,9 @@ COPY packages/core ./packages/core
 
 WORKDIR /usr/src/app/apps/site
 
+# Build the static Tailwind stylesheet (gitignored output) into public/assets.
+RUN bun run css:build
+
 # Commit this image was built from. Deploy verification reads it back over HTTP
 # to prove the running container is the one CI just built.
 ARG GIT_SHA=unknown

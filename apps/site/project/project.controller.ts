@@ -2,7 +2,7 @@ import { Injectable, type ProjectsRepository } from '@bg/core';
 import { errorResponse, readJsonWithin, refuseCrossSite, refuseNonJson } from '../http/requests';
 import { type Lang, resolveLang, t } from '../i18n';
 import { renderComponentTemplate, renderDocument } from '../site';
-import { projectArt } from './project-art';
+import { type ProjectArt, projectArt } from './project-art';
 import { projectIcon } from './project-icons';
 import { PROJECT_LIMITS, parseNewProject, parseProjectChanges } from './project-input';
 
@@ -69,6 +69,23 @@ function renderHiddenBadge(isHidden: boolean, lang: Lang, projectId: number) {
   return `<span id="project-visibility-${projectId}" class="inline-flex items-center px-2 py-0.5 bg-secondary/10 text-secondary border border-secondary/30 text-[10px] font-mono font-bold uppercase tracking-wider">${escapeHtml(t(lang, 'visibilityHidden'))}</span>`;
 }
 
+const CARD_COVER_SIZES = '(max-width: 639px) 100vw, (max-width: 1023px) 50vw, 384px';
+const DETAIL_COVER_SIZES = '(max-width: 767px) 100vw, 768px';
+
+// Format sources are always wrapped in <picture>: the cover box positions that element.
+function renderArtSources(art: ProjectArt, sizes: string, lazy: boolean) {
+  const attribute = lazy ? 'data-srcset' : 'srcset';
+  const formats = [
+    ['avif', art.avif],
+    ['webp', art.webp],
+  ] as const;
+  return formats
+    .map(([format, srcset]) =>
+      srcset ? `<source type="image/${format}" sizes="${sizes}" ${attribute}="${escapeHtml(srcset)}">\n        ` : '',
+    )
+    .join('');
+}
+
 async function renderProjectCard(project: ProjectRecord, lang: Lang) {
   const name = escapeHtml(project.name);
   const description = escapeHtml(project.description?.trim() || t(lang, 'projectNoDescription'));
@@ -77,11 +94,10 @@ async function renderProjectCard(project: ProjectRecord, lang: Lang) {
   const tags = project.tags;
   const hiddenBadge = renderHiddenBadge(project.isHidden, lang, project.id);
   // Sources are activated near the viewport: native lazy-loading alone may fetch all
-  // three large originals on mobile. The gallery's observer also handles HTMX swaps.
+  // three originals on mobile. The gallery's observer also handles HTMX swaps.
   const pictureHtml = art
     ? `<picture>
-        ${art.webp ? `<source type="image/webp" data-srcset="${escapeHtml(art.webp)}">` : ''}
-        <img data-project-cover data-src="${escapeHtml(art.image)}" width="${art.width}" height="${art.height}" loading="lazy" decoding="async" alt="">
+        ${renderArtSources(art, CARD_COVER_SIZES, true)}<img data-project-cover data-src="${escapeHtml(art.image)}" width="${art.width}" height="${art.height}" loading="lazy" decoding="async" alt="">
       </picture>`
     : '';
 
@@ -158,12 +174,16 @@ async function renderProjectPage(req: Request, project: ProjectRecord, canEdit: 
         <div id="project-admin-status" class="font-mono text-xs text-on-surface-variant"></div>
       </div>`
     : '';
-  const imageBlock = image
+  const art = projectArt(image);
+  const previewAlt = `${escapeHtml(project.name)} preview`;
+  // Known artwork has a 4:3 master; arbitrary uploads keep their own natural ratio.
+  const previewSize = art?.avif ? ` width="${art.width}" height="${art.height}"` : '';
+  const imageBlock = art
     ? `<div class="overflow-hidden border border-outline-variant/30 bg-surface" ${canEdit ? 'data-admin-editable="image"' : ''}>
-        <img data-project-preview class="max-h-[520px] w-full object-cover" src="${escapeHtml(image)}" alt="${escapeHtml(project.name)} preview"/>
+        <picture>${canEdit ? '' : `\n        ${renderArtSources(art, DETAIL_COVER_SIZES, false)}`}<img data-project-preview class="max-h-[520px] w-full object-cover" src="${escapeHtml(art.image)}"${previewSize} fetchpriority="high" decoding="async" alt="${previewAlt}"></picture>
       </div>`
     : `<div class="overflow-hidden border border-outline-variant/30 bg-surface" hidden>
-        <img data-project-preview class="max-h-[520px] w-full object-cover" src="" alt="${escapeHtml(project.name)} preview"/>
+        <img data-project-preview class="max-h-[520px] w-full object-cover" src="" alt="${previewAlt}"/>
       </div>`;
   const contentHtml = await renderComponentTemplate('projects/page.html', {
     adminControls,

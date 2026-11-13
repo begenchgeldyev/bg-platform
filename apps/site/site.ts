@@ -1,3 +1,4 @@
+import { stat } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
 import { type Lang, localizedFragmentFile, t } from './i18n';
 
@@ -21,8 +22,20 @@ const PAGES_DIR = join(APP_DIR, 'pages');
 const COMPONENTS_DIR = join(APP_DIR, 'components');
 const PUBLIC_DIR = join(APP_DIR, 'public');
 const templateCache = new Map<string, Promise<string>>();
+const assetMetaCache = new Map<string, Promise<AssetMeta>>();
+const pageCache = new Map<string, PageEntry>();
+
+// Content is static and only re-rendered by a deploy, so caches are only safe in production (dev serves hot edits).
+function isProduction() {
+  return process.env.NODE_ENV === 'production';
+}
+
+const IMMUTABLE_CACHE_CONTROL = 'public, max-age=604800, stale-while-revalidate=86400';
+const TEXT_CACHE_CONTROL = 'public, max-age=3600';
+const LONG_LIVED_EXTENSIONS = new Set(['.avif', '.jpeg', '.jpg', '.png', '.ttf', '.webp', '.woff2']);
 
 const MIME: Record<string, string> = {
+  '.avif': 'image/avif',
   '.css': 'text/css; charset=utf-8',
   '.html': 'text/html; charset=utf-8',
   '.jpeg': 'image/jpeg',
@@ -35,6 +48,107 @@ const MIME: Record<string, string> = {
   '.webp': 'image/webp',
   '.woff2': 'font/woff2',
 };
+
+type AssetMeta = {
+  size: number;
+  etag: string;
+  lastModified?: string;
+};
+
+type PageEntry = {
+  html: string;
+  etag: string;
+};
+
+type ByteRange = { start: number; end: number };
+
+function isNotModified(req: Request | undefined, etag: string) {
+  const ifNoneMatch = req?.headers.get('if-none-match');
+  if (!ifNoneMatch) {
+    return false;
+  }
+
+  return ifNoneMatch.split(',').some((candidate) => {
+    const tag = candidate.trim();
+    return tag === '*' || tag === etag || tag === `W/${etag}`;
+  });
+}
+
+function parseSingleRange(header: string, size: number): ByteRange | 'unsatisfiable' | null {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!match) {
+    return null;
+  }
+
+  const [, rawStart, rawEnd] = match;
+  if (rawStart === '' && rawEnd === '') {
+    return null;
+  }
+
+  if (rawStart === '') {
+    const suffixLength = Number(rawEnd);
+    if (!Number.isInteger(suffixLength) || suffixLength <= 0) {
+      return null;
+    }
+    return { start: Math.max(0, size - suffixLength), end: size - 1 };
+  }
+
+  const start = Number(rawStart);
+  const end = rawEnd === '' ? size - 1 : Number(rawEnd);
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start > end || start >= size) {
+    return 'unsatisfiable';
+  }
+
+  return { start, end: Math.min(end, size - 1) };
+}
+
+// size + mtime is enough to tell two revisions of the same file apart without hashing it.
+function assetMeta(assetPath: string, fileSize: number): Promise<AssetMeta> {
+  const cached = assetMetaCache.get(assetPath);
+  if (cached) {
+    return cached;
+  }
+
+  const promise = stat(assetPath).then(
+    (info): AssetMeta => ({
+      size: info.size,
+      etag: `"${info.size}-${Math.floor(info.mtimeMs)}"`,
+      lastModified: info.mtime.toUTCString(),
+    }),
+    (): AssetMeta => ({ size: fileSize, etag: `"${fileSize}-0"` }),
+  );
+
+  if (isProduction()) {
+    assetMetaCache.set(assetPath, promise);
+  }
+
+  return promise;
+}
+
+function pageEtag(html: string) {
+  const digest = new Bun.CryptoHasher('sha1').update(html).digest('hex').slice(0, 20);
+  return `"${html.length.toString(16)}-${digest}"`;
+}
+
+function htmlResponse(html: string, etag: string, req: Request | undefined): Response {
+  const headers = new Headers({
+    'Cache-Control': 'no-cache',
+    'Content-Type': 'text/html; charset=utf-8',
+    ETag: etag,
+    Vary: 'Cookie',
+  });
+
+  if (isNotModified(req, etag)) {
+    return new Response(null, { status: 304, headers });
+  }
+
+  if (req?.method === 'HEAD') {
+    headers.set('Content-Length', String(Buffer.byteLength(html)));
+    return new Response(null, { headers });
+  }
+
+  return new Response(html, { headers });
+}
 
 const PAGE_CONFIGS: Record<string, PageConfig> = {
   '/': {
@@ -199,10 +313,17 @@ async function resolveIncludes(html: string): Promise<string> {
   return html;
 }
 
-export async function renderPage(pathname: string, lang: Lang): Promise<Response | null> {
+export async function renderPage(pathname: string, lang: Lang, req?: Request): Promise<Response | null> {
   const config = PAGE_CONFIGS[pathname];
   if (!config) {
     return null;
+  }
+
+  const cacheable = isProduction();
+  const cacheKey = `${pathname}:${lang}`;
+  const cached = cacheable ? pageCache.get(cacheKey) : undefined;
+  if (cached) {
+    return htmlResponse(cached.html, cached.etag, req);
   }
 
   const localized = Bun.file(join(PAGES_DIR, localizedFragmentFile(config.fragmentFile, lang)));
@@ -214,12 +335,18 @@ export async function renderPage(pathname: string, lang: Lang): Promise<Response
   }
 
   const content = await resolveIncludes(await fragment.text());
-  return new Response(await renderLayout(config, content, lang), {
-    headers: { 'Content-Type': 'text/html; charset=utf-8' },
-  });
+  const html = await renderLayout(config, content, lang);
+
+  if (!cacheable) {
+    return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  }
+
+  const etag = pageEtag(html);
+  pageCache.set(cacheKey, { html, etag });
+  return htmlResponse(html, etag, req);
 }
 
-export async function servePublicAsset(pathname: string): Promise<Response> {
+export async function servePublicAsset(pathname: string, req?: Request): Promise<Response> {
   let relativePath: string;
 
   try {
@@ -239,7 +366,42 @@ export async function servePublicAsset(pathname: string): Promise<Response> {
     return new Response('Not Found', { status: 404 });
   }
 
-  return new Response(file, {
-    headers: { 'Content-Type': MIME[extname(assetPath)] ?? 'application/octet-stream' },
+  const extension = extname(assetPath);
+  const meta = await assetMeta(assetPath, file.size);
+  const headers = new Headers({
+    'Accept-Ranges': 'bytes',
+    'Cache-Control': LONG_LIVED_EXTENSIONS.has(extension) ? IMMUTABLE_CACHE_CONTROL : TEXT_CACHE_CONTROL,
+    'Content-Type': MIME[extension] ?? 'application/octet-stream',
+    ETag: meta.etag,
   });
+  if (meta.lastModified) {
+    headers.set('Last-Modified', meta.lastModified);
+  }
+
+  if (isNotModified(req, meta.etag)) {
+    return new Response(null, { status: 304, headers });
+  }
+
+  const rangeHeader = req?.headers.get('range');
+  if (rangeHeader && meta.size > 0) {
+    const range = parseSingleRange(rangeHeader, meta.size);
+    if (range === 'unsatisfiable') {
+      headers.set('Content-Range', `bytes */${meta.size}`);
+      return new Response(null, { status: 416, headers });
+    }
+
+    if (range) {
+      headers.set('Content-Length', String(range.end - range.start + 1));
+      headers.set('Content-Range', `bytes ${range.start}-${range.end}/${meta.size}`);
+      const body = req?.method === 'HEAD' ? null : file.slice(range.start, range.end + 1);
+      return new Response(body, { status: 206, headers });
+    }
+  }
+
+  if (req?.method === 'HEAD') {
+    headers.set('Content-Length', String(meta.size));
+    return new Response(null, { headers });
+  }
+
+  return new Response(file, { headers });
 }

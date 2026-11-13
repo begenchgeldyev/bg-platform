@@ -2,12 +2,31 @@
 
 User-supplied, approved artwork for Pantheon, bg-platform and Interpreter.
 
-Each `*-pixel.png` is an opaque, metadata-clean **1448 × 1086 (4:3)** copy.
-Each same-name `.webp` is a **lossless** derivative with the same dimensions
-and identical decoded RGB pixels. Neither format is cropped, resized or recolored.
-PNG URLs remain the stored project-image contract; the gallery explicitly maps
-these three files to their WebP alternatives and retains PNG fallback.
+Each `*-pixel.png` is an opaque, metadata-clean **1200 × 900 (4:3)** PNG fallback;
+`projects.image` in the database stores that `.png` URL, so it must keep working.
+Each format/width derivative is a plain resample of the same 1448 × 1086 source:
 
-The gallery displays the complete image in a reserved 4:3 area with no tint or
-scrim. Near-viewport loading and asynchronous decoding keep offscreen covers from
-being downloaded immediately. No prototype artwork is included here.
+- `*-pixel-{400,800,1200,1448}.avif` — AVIF quality 50
+- `*-pixel-{400,800,1200,1448}.webp` — WebP quality 82, method 6
+
+The gallery card renders `<picture>` with AVIF, then WebP, then the PNG as the
+`<img>` fallback, at `sizes="(max-width: 639px) 100vw, (max-width: 1023px) 50vw, 384px"`.
+The detail page uses the same set at `sizes="(max-width: 767px) 100vw, 768px"` and
+loads eagerly with `fetchpriority="high"`. Card sources stay deferred in
+`data-srcset` until the IntersectionObserver in the gallery activates them; on a
+decode error every `<source>` is dropped so the PNG (or the icon placeholder)
+takes over. No prototype artwork is included here.
+
+Regenerate after replacing the source artwork. The derivatives are resampled from the
+1448 × 1086 master, which the committed `.png` no longer is (it is the 1200 px
+fallback); restore it first with `git show <rev>:apps/site/.../<name>-pixel.png`.
+
+```bash
+for n in pantheon bg-platform interpreter; do
+  for w in 400 800 1200 1448; do
+    magick "$n-pixel.png" -resize "${w}x" -strip -quality 50 "$n-pixel-$w.avif"
+    magick "$n-pixel.png" -resize "${w}x" -strip -quality 82 -define webp:method=6 "$n-pixel-$w.webp"
+  done
+  magick "$n-pixel.png" -resize 1200x -strip -define png:compression-level=9 -define png:compression-filter=5 "$n-pixel.png"
+done
+```

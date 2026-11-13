@@ -66,7 +66,7 @@ Bun.serve({
     const { pathname } = new URL(req.url);
 
     if (pathname.startsWith('/public/')) {
-      return servePublicAsset(pathname);
+      return servePublicAsset(pathname, req);
     }
 
     const projectApiMatch = pathname.match(/^\/api\/projects\/(\d+)$/);
@@ -86,7 +86,7 @@ Bun.serve({
       return container.resolve(ProjectController).getPageById(req, Number(projectDetailMatch[1]));
     }
 
-    const page = await renderPage(pathname, resolveLang(req));
+    const page = await renderPage(pathname, resolveLang(req), req);
     if (page) {
       return page;
     }

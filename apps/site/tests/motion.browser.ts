@@ -236,6 +236,8 @@ try {
   const external = await externalPromise;
   await external.waitForLoadState();
   assert.equal(new URL(external.url()).hostname, externalURL.hostname);
+  // A fast document can reach `load` before the activation that fires `pagereveal`.
+  await external.waitForFunction(() => Boolean(window.transitionEvidence));
   assert.equal(await external.evaluate(() => window.transitionEvidence.native), false);
   await external.close();
   await links.locator('#form-test button').click();
@@ -244,6 +246,7 @@ try {
   assert.equal(await links.locator('main').evaluate((main: Element) => getComputedStyle(main).viewTransitionName), 'none');
   await links.locator('header a[href="/cv"]').click();
   await links.waitForURL('**/cv');
+  await links.waitForFunction(() => Boolean(window.transitionEvidence));
   assert.equal(await links.evaluate(() => window.transitionEvidence.native), false, 'admin does not opt into transitions');
   await ordinary.close();
   console.log('PASS project shell, hashes, modified clicks, download, external origin, form, admin boundary');
@@ -272,6 +275,8 @@ try {
     await page.locator('header a[href="/cv"]').click();
     await page.waitForURL('**/cv');
     assert.equal(await page.locator('main').count(), 1);
+    // `pagereveal` may land after the document commits; wait for the recorded evidence instead of racing it.
+    await page.waitForFunction(() => Boolean(window.transitionEvidence));
     assert.equal(await page.evaluate(() => window.transitionEvidence.native), false, 'ordinary navigation when native opt-in is ignored');
     await page.screenshot({ path: `${output}/transition-unsupported.png` });
     await page.goBack();

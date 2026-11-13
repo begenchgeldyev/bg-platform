@@ -18,5 +18,9 @@ ENV GIT_SHA=$GIT_SHA
 LABEL org.opencontainers.image.revision=$GIT_SHA
 ENV NODE_ENV=production
 WORKDIR /usr/src/app/apps/site
+
+# Build the static Tailwind stylesheet (gitignored output) into public/assets.
+RUN bun run css:build
+
 EXPOSE 8613
 CMD ["bun", "server.ts"]

@@ -332,10 +332,14 @@ describe('project cards', () => {
     expect(html).not.toContain('github.com');
   });
 
-  test('serves only explicitly mapped lossless derivatives with PNG fallback and reserved dimensions', async () => {
+  test('serves explicit responsive derivatives with a PNG fallback and reserved dimensions', async () => {
     const subject = controller({ projects: [project({ image: '/public/projects/pantheon-pixel.png' })] });
     const html = await (await subject.controller.get(hxList())).text();
-    expect(html).toContain(' data-srcset="/public/projects/pantheon-pixel.webp"');
+    const sizes = 'sizes="(max-width: 639px) 100vw, (max-width: 1023px) 50vw, 384px"';
+    expect(html).toContain(`<source type="image/avif" ${sizes} data-srcset="/public/projects/pantheon-pixel-400.avif 400w, `);
+    expect(html).toContain(`<source type="image/webp" ${sizes} data-srcset="/public/projects/pantheon-pixel-400.webp 400w, `);
+    expect(html).toContain('/public/projects/pantheon-pixel-1200.avif 1200w, /public/projects/pantheon-pixel-1448.avif 1448w"');
+    expect(html).toContain('<picture>');
     expect(html).toContain(' data-src="/public/projects/pantheon-pixel.png"');
     expect(html).not.toMatch(/\ssrc(?:set)?\s*=/);
     expect(html).toContain('width="1448" height="1086"');
@@ -344,9 +348,29 @@ describe('project cards', () => {
     expect(html).toContain('alt=""');
     const other = controller({ projects: [project({ image: '/public/custom.png' })] });
     const custom = await (await other.controller.get(hxList())).text();
+    expect(custom).toContain('<picture>');
     expect(custom).toContain(' data-src="/public/custom.png"');
+    expect(custom).not.toMatch(/<source/);
     expect(custom).not.toMatch(/\ssrc(?:set)?\s*=/);
-    expect(custom).not.toContain('custom.webp');
+  });
+
+  test('the detail page loads one responsive derivative eagerly', async () => {
+    const subject = controller({ projects: [project({ image: '/public/projects/interpreter-pixel.png' })] });
+    const html = await (await subject.controller.getPageById(new Request('http://localhost/projects/1'), 1)).text();
+    expect(html).toContain('sizes="(max-width: 767px) 100vw, 768px" srcset="/public/projects/interpreter-pixel-400.avif 400w, ');
+    expect(html).toContain(
+      'type="image/webp" sizes="(max-width: 767px) 100vw, 768px" srcset="/public/projects/interpreter-pixel-400.webp 400w',
+    );
+    expect(html).toContain('src="/public/projects/interpreter-pixel.png"');
+    expect(html).toContain('fetchpriority="high"');
+    expect(html).toContain('decoding="async"');
+    expect(html).toContain('width="1448" height="1086"');
+    expect(html).not.toContain('loading="lazy"');
+    expect(html).not.toContain('data-srcset');
+    const owner = controller({ projects: [project({ image: '/public/projects/interpreter-pixel.png' })], canEdit: true });
+    const ownerHtml = await (await owner.controller.getPageById(new Request('http://localhost/projects/1'), 1)).text();
+    expect(ownerHtml).toContain('data-project-preview');
+    expect(ownerHtml).not.toMatch(/<source/);
   });
 
   test('missing or unsafe image URLs keep a useful fallback, never an empty or executable image', async () => {

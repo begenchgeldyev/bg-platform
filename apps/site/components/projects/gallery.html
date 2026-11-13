@@ -152,8 +152,8 @@
   const loadingText = gallery.querySelector('[data-project-loading]').textContent.trim();
   let retrying = false;
   function loadImage(image) {
-    const source = image.closest('picture').querySelector('source[data-srcset]');
-    if (source) source.srcset = source.dataset.srcset;
+    const picture = image.closest('picture');
+    for (const source of picture?.querySelectorAll('source[data-srcset]') ?? []) source.srcset = source.dataset.srcset;
     image.src = image.dataset.src;
   }
   const observer =
@@ -205,9 +205,10 @@
       if (!image.matches?.('[data-project-cover]')) return;
       delete image.dataset.loaded;
       const picture = image.closest('picture');
-      const source = picture.querySelector('source');
-      if (source) {
-        source.remove();
+      // Every format source is dropped together: a remaining source would outrank the PNG.
+      const sources = picture.querySelectorAll('source');
+      if (sources.length > 0) {
+        for (const source of sources) source.remove();
         image.src = image.dataset.src;
       } else {
         picture.hidden = true;
