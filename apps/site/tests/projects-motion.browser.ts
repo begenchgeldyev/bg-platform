@@ -290,6 +290,163 @@ try {
     }
   });
 
+  await check('a still-focused or still-hovered card resumes motion after a document visibility round-trip', async () => {
+    const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
+    const page = await openPage(context);
+    await galleryRoute(context, card(4, 'Pantheon', PANTHEON));
+    try {
+      await page.goto('/projects', { waitUntil: 'domcontentloaded' });
+      await page.waitForSelector('.project-card');
+      await page.waitForFunction(() => document.querySelector<HTMLImageElement>('[data-project-cover]')?.dataset.loaded === 'true');
+      await page.evaluate(() => {
+        const card = document.querySelector('.project-card');
+        const counts = { focusin: 0, pointerenter: 0 };
+        card?.addEventListener('focusin', () => counts.focusin++);
+        card?.addEventListener('pointerenter', () => counts.pointerenter++);
+        (window as Window & { interactionEvents?: typeof counts }).interactionEvents = counts;
+      });
+      const hide = () =>
+        page.evaluate(() => {
+          Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+          document.dispatchEvent(new Event('visibilitychange'));
+        });
+      const show = () =>
+        page.evaluate(() => {
+          delete (document as Document & { visibilityState?: string }).visibilityState;
+          document.dispatchEvent(new Event('visibilitychange'));
+        });
+
+      await page.locator('.project-card-link').first().focus();
+      await waitForAttr(page, 'card', 'active');
+      assert.equal(await page.evaluate(() => document.activeElement?.className), 'project-card-link', 'the link must hold focus');
+      await hide();
+      await waitForAttr(page, 'card', null);
+      assert.equal((await probe(page, 'card'))?.running, false, 'a hidden document must stop the sweep');
+      assert.equal(await page.evaluate(() => document.activeElement?.className), 'project-card-link', 'focus must survive the round-trip');
+      await show();
+      await page.waitForFunction(
+        () => document.querySelector('.project-cover')?.getAttribute('data-image-motion') === 'active',
+        undefined,
+        { timeout: 2500 },
+      );
+      assert.equal(
+        (await page.evaluate(() => (window as Window & { interactionEvents?: { focusin: number } }).interactionEvents?.focusin)) ?? 0,
+        1,
+        'resumed focus motion must not depend on a fresh focusin event',
+      );
+      assert.equal(await page.evaluate(() => document.activeElement?.className), 'project-card-link', 'focus must remain on the link');
+
+      // The same round-trip with the pointer resting on the card and no new pointerenter.
+      await page
+        .locator('.project-card-link')
+        .first()
+        .evaluate((element) => (element as HTMLElement).blur());
+      await waitForAttr(page, 'card', 'ready');
+      await page.locator('.project-card').first().hover();
+      await waitForAttr(page, 'card', 'active');
+      const pointerEnters = await page.evaluate(
+        () => (window as Window & { interactionEvents?: { pointerenter: number } }).interactionEvents?.pointerenter ?? 0,
+      );
+      await hide();
+      await waitForAttr(page, 'card', null);
+      await show();
+      await page.waitForFunction(
+        () => document.querySelector('.project-cover')?.getAttribute('data-image-motion') === 'active',
+        undefined,
+        { timeout: 2500 },
+      );
+      assert.equal(
+        await page.evaluate(
+          () => (window as Window & { interactionEvents?: { pointerenter: number } }).interactionEvents?.pointerenter ?? 0,
+        ),
+        pointerEnters,
+        'resumed hover motion must not depend on a fresh pointerenter event',
+      );
+      assert.equal(
+        await page
+          .locator('.project-card')
+          .first()
+          .evaluate((element) => element.matches(':hover')),
+        true,
+      );
+    } finally {
+      await context.close();
+    }
+  });
+
+  await check('a card crossing 1% visibility activates without waiting for 35%', async () => {
+    const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
+    const page = await openPage(context);
+    await galleryRoute(context, card(4, 'Pantheon', PANTHEON));
+    try {
+      await page.goto('/projects', { waitUntil: 'domcontentloaded' });
+      await page.waitForSelector('.project-card');
+      await page.waitForFunction(() => document.querySelector<HTMLImageElement>('[data-project-cover]')?.dataset.loaded === 'true');
+      // Test-only spacer: the tall viewport-relative scroll range this check needs, without
+      // touching the shipped gallery markup or its layout.
+      await page.evaluate(() => {
+        const gallery = document.getElementById('project-gallery');
+        const spacer = document.createElement('div');
+        spacer.id = 'motion-geometry-spacer';
+        spacer.style.height = '1200px';
+        gallery?.before(spacer);
+      });
+      const geometry = await page.evaluate(() => {
+        const frame = document.querySelector('[data-project-cover]')?.closest('.project-cover');
+        if (!frame) return null;
+        const rect = frame.getBoundingClientRect();
+        return {
+          top: rect.top + window.scrollY,
+          height: rect.height,
+          viewport: window.innerHeight,
+          maxScroll: document.documentElement.scrollHeight - window.innerHeight,
+        };
+      });
+      assert.ok(geometry, 'cover geometry');
+      assert.ok(geometry.height > 100, 'cover must have a measurable height');
+      const justInside = 1;
+      const belowMinimumScroll = Math.round(geometry.top - (geometry.viewport - justInside));
+      assert.ok(belowMinimumScroll > 0, 'the cover must sit far enough down the page to start partly outside');
+      assert.ok(belowMinimumScroll < geometry.maxScroll, 'the page must scroll far enough for a sub-1% intersection');
+      await page.evaluate((y) => window.scrollTo(0, y), belowMinimumScroll);
+      await page.waitForTimeout(180);
+      const belowMinimum = await probe(page, 'card');
+      assert.equal(belowMinimum?.attr, 'ready', 'a cover under 1% in view must stay idle');
+
+      // Keyboard activation with preventScroll: normal focus would scroll the cover into view.
+      await page
+        .locator('.project-card-link')
+        .first()
+        .evaluate((element) => (element as HTMLElement).focus({ preventScroll: true }));
+      assert.equal(await page.evaluate(() => window.scrollY), belowMinimumScroll, 'focus must not move the cover into view');
+      assert.equal((await probe(page, 'card'))?.attr, 'ready', 'focus alone cannot activate a cover below the 1% minimum');
+
+      // Scroll to a ratio between the card minimum (1%) and the page threshold (35%).
+      const betweenScroll = belowMinimumScroll + Math.round(geometry.height * 0.1);
+      assert.ok(betweenScroll < geometry.maxScroll, 'the page must scroll far enough for a 10% intersection');
+      await page.evaluate((y) => window.scrollTo(0, y), betweenScroll);
+      const ratio = await page.evaluate(() => {
+        const frame = document.querySelector('[data-project-cover]')?.closest('.project-cover');
+        if (!frame) return 0;
+        const rect = frame.getBoundingClientRect();
+        const visible = Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0);
+        return visible > 0 ? visible / rect.height : 0;
+      });
+      assert.ok(ratio > 0.01 && ratio < 0.35, `expected a 1%-35% intersection, saw ${ratio}`);
+      await page.waitForFunction(
+        () => document.querySelector('.project-cover')?.getAttribute('data-image-motion') === 'active',
+        undefined,
+        { timeout: 2500 },
+      );
+      const active = await probe(page, 'card');
+      assert.equal(active?.attr, 'active');
+      assert.equal(active?.running, true, 'crossing the 1% minimum must run the authored animation');
+      await page.screenshot({ path: shot('gallery-partial-visibility') });
+    } finally {
+      await context.close();
+    }
+  });
+
   await check('reduced motion stays static and follows a live preference change', async () => {
     const reduced = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
     const reducedPage = await openPage(reduced);

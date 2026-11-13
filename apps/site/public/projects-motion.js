@@ -99,7 +99,7 @@
             apply(state);
           }
         },
-        { threshold: [0, 0.35] },
+        { threshold: [0, 0.01, 0.35] },
       )
     : null;
 
@@ -162,6 +162,7 @@
       frame,
       image,
       mode,
+      card: null,
       controller,
       applied: null,
       loaded: false,
@@ -186,6 +187,7 @@
 
     if (mode === 'hover') {
       const card = image.closest('.project-card') ?? frame;
+      state.card = card;
       card.addEventListener(
         'pointerenter',
         () => {
@@ -291,6 +293,11 @@
       if (documentHidden) {
         state.hovered = false;
         state.focused = false;
+      } else if (state.mode === 'hover' && state.card) {
+        // A tab round-trip replays no pointer or focus event, so the flags cleared above are
+        // stale. Read the live interaction back from the document instead of trusting them.
+        state.hovered = state.card.matches(':hover');
+        state.focused = state.card.contains(document.activeElement);
       }
       apply(state);
     }
