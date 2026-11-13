@@ -1,7 +1,12 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.4.11/schema.json",
   "files": {
-    "includes": ["**", "!packages/core/drizzle/migrations/meta"]
+    "includes": ["**", "!packages/core/drizzle/migrations/meta", "!apps/site/public/vendor", "!apps/site/public/assets"]
+  },
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
   },
   "formatter": {
     "enabled": true,

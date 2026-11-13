@@ -4,7 +4,7 @@ www.begenchgeldyev.com {
 
 begenchgeldyev.com {
 	reverse_proxy site:8613
-	encode gzip
+	encode zstd gzip
 }
 
 # Container-loopback readiness endpoint; never published on the host.

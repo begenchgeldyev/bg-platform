@@ -1,0 +1,4 @@
+/* biome-ignore-all lint/suspicious/noUnknownAtRules: processed by the Tailwind CLI, not the browser. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

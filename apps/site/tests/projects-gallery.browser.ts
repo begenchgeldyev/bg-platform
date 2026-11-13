@@ -365,7 +365,7 @@ try {
       assert.equal(response.status(), 200);
       await page.waitForSelector('.project-card');
       await page.evaluate(() => document.fonts.ready);
-      await page.waitForFunction(() => document.querySelector<HTMLImageElement>('[data-project-cover]')?.naturalWidth === 1448);
+      await page.waitForFunction(() => document.querySelector<HTMLImageElement>('[data-project-cover]')?.dataset.loaded === 'true');
       const initialRequests = [...requests];
       if (width < 640) assert.ok(initialRequests.length < 3, 'offscreen covers must not all download on mobile');
       const reservedBefore = await page
@@ -391,8 +391,10 @@ try {
       );
       assert.ok(metrics.descriptions.every((x: { clamp: string; clipped: boolean }) => x.clamp === 'none' && !x.clipped));
       for (const image of metrics.images) {
-        assert.equal(image.width, 1448);
-        assert.equal(image.height, 1086);
+        // `naturalWidth` is density-corrected by `sizes`, so the candidate comes from the URL and the ratio is checked.
+        const candidate = Number(/-(400|800|1200|1448)\.avif$/.exec(image.source)?.[1]);
+        assert.ok([400, 800, 1200, 1448].includes(candidate), `unexpected cover candidate ${image.source}`);
+        assert.ok(Math.abs(image.width / image.height - 1448 / 1086) < 0.01, 'cover aspect ratio must survive the srcset');
         assert.equal(image.opacity, '1');
         assert.equal(image.visibility, 'visible');
         assert.equal(image.filter, 'none');
@@ -400,7 +402,15 @@ try {
         assert.equal(image.rendering, 'pixelated');
         assert.equal(image.loading, 'lazy');
         assert.equal(image.decoding, 'async');
-        assert.ok(image.source.endsWith('.webp'));
+        // Chromium takes the first supported format source, and AVIF is first.
+        assert.ok(image.source.endsWith('.avif'), `cover served ${image.source}`);
+        assert.equal(
+          image.png,
+          `/public/projects/${image.source
+            .split('/')
+            .pop()
+            ?.replace(/-\d+\.avif$/, '.png')}`,
+        );
       }
       assert.ok(
         metrics.cards.every(
@@ -479,11 +489,14 @@ try {
           } else {
             assert.equal(await page.locator('[data-project-field="content"] a[href*="github.com"]').count(), 0);
           }
-          for (const extension of ['png', 'webp']) {
-            const url = item.image.replace(/png$/, extension);
+          // Every derivative the card srcset can pick, plus the PNG fallback, must be the tracked file.
+          for (const variant of ['400.avif', '400.webp', 'png'] as const) {
+            const base = item.image.replace(/\.png$/, '');
+            const url = variant === 'png' ? `${base}.png` : `${base}-${variant}`;
+            const format = variant.split('.').pop();
             const asset = await context.request.get(url);
             assert.equal(asset.status(), 200);
-            assert.ok(asset.headers()['content-type'].startsWith(`image/${extension}`));
+            assert.ok(asset.headers()['content-type'].startsWith(`image/${format}`));
             const body = await asset.body();
             // Compare served bytes to the exact tracked public asset, not a remote URL.
             const file = Bun.file(new URL(`../public/projects/${url.split('/').pop()}`, import.meta.url));
@@ -559,24 +572,21 @@ try {
   );
   report.fixtures.push({ type: 'list-error-and-keyboard-retry', passed: true });
 
-  // Missing derivative falls back to its PNG; failed PNG then exposes the decorative fallback.
+  // A failed format source is not retried inside <picture>: the gallery drops every <source> and
+  // falls back to the PNG, and a failed PNG finally exposes the decorative placeholder.
+  await context.route('**/public/projects/*.avif', (route: { abort: () => Promise<void> }) => route.abort());
+  await page.goto('/projects');
+  await page.waitForFunction(() => document.querySelector<HTMLImageElement>('[data-project-cover]')?.currentSrc.endsWith('.png'));
   await context.route('**/public/projects/*.webp', (route: { abort: () => Promise<void> }) => route.abort());
   await page.goto('/projects');
-  await page.waitForFunction(() => document.querySelector<HTMLImageElement>('[data-project-cover]')?.naturalWidth === 1448);
-  assert.ok(
-    (
-      await page
-        .locator('[data-project-cover]')
-        .first()
-        .evaluate((el: HTMLImageElement) => el.currentSrc)
-    ).endsWith('.png'),
-  );
+  await page.waitForFunction(() => document.querySelector<HTMLImageElement>('[data-project-cover]')?.currentSrc.endsWith('.png'));
+  assert.equal(await page.locator('.project-cover picture source').count(), 0, 'failed sources are dropped entirely');
   await context.route('**/public/projects/*.png', (route: { abort: () => Promise<void> }) => route.abort());
   await page.goto('/projects');
   await page.waitForFunction(() => document.querySelector<HTMLPictureElement>('.project-cover picture')?.hidden);
   assert.equal(await page.locator('.project-cover-fallback').first().isVisible(), true);
   assert.equal(await page.locator('.project-card-link').first().getAttribute('href'), '/projects/4');
-  report.fixtures.push({ type: 'webp-png-error-fallback', passed: true });
+  report.fixtures.push({ type: 'avif-webp-png-error-fallback', passed: true });
   await context.close();
   assert.equal(report.aiRequests, 0);
   await Bun.write(`${output}/results.json`, JSON.stringify(report, null, 2));

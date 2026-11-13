@@ -1,3 +1,15 @@
+<!-- Navigate-time prerendering for same-origin nav, activated on hover/touch (moderate eagerness).
+     Browsers without Speculation Rules support ignore this script; only the listed paths are eligible. -->
+<script type="speculationrules">
+{
+  "prerender": [
+    {
+      "where": { "href_matches": ["/", "/projects", "/projects/*", "/logs", "/cv"] },
+      "eagerness": "moderate"
+    }
+  ]
+}
+</script>
 <style>
 /* Public documents only. Native navigation stays in charge of history, focus and links.
    Paint the canvas before the CDN loads; leave the sticky header and footer still. */

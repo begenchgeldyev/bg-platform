@@ -1,5 +1,6 @@
 .env
 site.env
+apps/site/public/assets/
 dist/
 node_modules/
 .todo.txt
