@@ -1,6 +1,11 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to coding agents when working with code in this repository.
+
+## Documentation
+
+- `GLOSSARY.md` — the canonical vocabulary. Use its terms in code, UI copy and new documents; the `_Avoid_` lines name the words they replace.
+- `docs/adr/` — accepted architecture decisions, each with the alternative it rejected. Read the relevant ADR before changing one.
 
 ## Runtime
 
