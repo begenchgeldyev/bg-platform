@@ -12,7 +12,7 @@ type Policy = {
   action: string;
   resource: string;
   resourceCondition: Record<string, unknown>;
-  contextContidition: Record<string, unknown>;
+  contextCondition: Record<string, unknown>;
 };
 
 function matchesCondition(condition: unknown, actual: Record<string, unknown>) {
@@ -32,7 +32,7 @@ function matchesAction(policyAction: string, requestAction: string) {
 
 export function evaluate(input: EvaluateInput, policies: Policy[]): 'allow' | 'deny' {
   const matches = policies.filter(
-    (policy) => matchesCondition(policy.subjectCondition, input.subject) && matchesAction(policy.action, input.action) && (policy.resource === '*' || policy.resource === input.resource) && matchesCondition(policy.resourceCondition, input.resourceAttributes) && matchesCondition(policy.contextContidition, input.context),
+    (policy) => matchesCondition(policy.subjectCondition, input.subject) && matchesAction(policy.action, input.action) && (policy.resource === '*' || policy.resource === input.resource) && matchesCondition(policy.resourceCondition, input.resourceAttributes) && matchesCondition(policy.contextCondition, input.context),
   );
 
   if (matches.some((p) => p.effect === 'deny')) return 'deny';
