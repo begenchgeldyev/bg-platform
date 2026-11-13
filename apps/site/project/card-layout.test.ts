@@ -17,6 +17,7 @@ describe('approved project covers layout', () => {
     expect(html).toContain('aspect-ratio: 4 / 3');
     expect(html).toContain('image-rendering: pixelated');
     expect(html).toContain('.project-card:focus-within');
+    expect(html).toContain('/public/projects-motion.js');
     expect(html).not.toMatch(/grayscale|line-clamp|scale\(/);
   });
 });
