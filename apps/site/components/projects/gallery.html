@@ -247,3 +247,6 @@
   }
 })();
 </script>
+<!-- Page includes are resolved once, not recursively, so gallery.html carries the shared
+     script tag directly; image-motion.html serves the same tag on project pages. -->
+<script defer src="/public/projects-motion.js"></script>

@@ -367,9 +367,11 @@ describe('project cards', () => {
     expect(html).toContain('width="1448" height="1086"');
     expect(html).not.toContain('loading="lazy"');
     expect(html).not.toContain('data-srcset');
+    expect(html).toContain('/public/projects-motion.js');
     const owner = controller({ projects: [project({ image: '/public/projects/interpreter-pixel.png' })], canEdit: true });
     const ownerHtml = await (await owner.controller.getPageById(new Request('http://localhost/projects/1'), 1)).text();
     expect(ownerHtml).toContain('data-project-preview');
+    expect(ownerHtml).toContain('/public/projects-motion.js');
     expect(ownerHtml).not.toMatch(/<source/);
   });
 

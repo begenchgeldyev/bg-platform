@@ -194,6 +194,7 @@ async function renderProjectPage(req: Request, project: ProjectRecord, canEdit: 
     headerEditableAttrs: canEdit ? 'data-admin-editable="header"' : '',
     contentEditableAttrs: canEdit ? 'data-admin-editable="content"' : '',
     imageBlock,
+    imageMotion: await renderComponentTemplate('projects/image-motion.html'),
     projectId: String(project.id),
     projectName: escapeHtml(project.name),
     route: `/projects/${project.id}`,
