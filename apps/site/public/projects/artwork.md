@@ -17,16 +17,25 @@ loads eagerly with `fetchpriority="high"`. Card sources stay deferred in
 decode error every `<source>` is dropped so the PNG (or the icon placeholder)
 takes over. No prototype artwork is included here.
 
-Regenerate after replacing the source artwork. The derivatives are resampled from the
-1448 × 1086 master, which the committed `.png` no longer is (it is the 1200 px
-fallback); restore it first with `git show <rev>:apps/site/.../<name>-pixel.png`.
+Regenerate after replacing the source artwork. Every derivative is resampled from the
+1448 × 1086 master, and the committed `.png` is only the 1200 px fallback, so restore
+the master into `<name>-master.png` first:
+
+```bash
+# <rev> is any commit that still has the 1448 × 1086 original, e.g. the parent of the
+# commit that re-encoded the fallback.
+git show <rev>:apps/site/public/projects/pantheon-pixel.png > pantheon-master.png
+```
+
+Then, from `apps/site/public/projects`, resample the master into the derivative set and
+the fallback (never resize the fallback itself — upscaling it would soften every cover):
 
 ```bash
 for n in pantheon bg-platform interpreter; do
   for w in 400 800 1200 1448; do
-    magick "$n-pixel.png" -resize "${w}x" -strip -quality 50 "$n-pixel-$w.avif"
-    magick "$n-pixel.png" -resize "${w}x" -strip -quality 82 -define webp:method=6 "$n-pixel-$w.webp"
+    magick "$n-master.png" -resize "${w}x" -strip -quality 50 "$n-pixel-$w.avif"
+    magick "$n-master.png" -resize "${w}x" -strip -quality 82 -define webp:method=6 "$n-pixel-$w.webp"
   done
-  magick "$n-pixel.png" -resize 1200x -strip -define png:compression-level=9 -define png:compression-filter=5 "$n-pixel.png"
+  magick "$n-master.png" -resize 1200x -strip -define png:compression-level=9 -define png:compression-filter=5 "$n-pixel.png"
 done
 ```
