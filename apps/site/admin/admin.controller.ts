@@ -109,6 +109,7 @@ export class AdminController {
       brandIsLink: true,
       footerVariant: 'default' as const,
       showTerminalIcon: true,
+      pageTransitions: false,
     };
 
     const responseHeaders = {

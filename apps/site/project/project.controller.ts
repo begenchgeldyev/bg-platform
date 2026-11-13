@@ -2,7 +2,7 @@ import { Injectable, type ProjectsRepository } from '@bg/core';
 import { errorResponse, readJsonWithin, refuseCrossSite, refuseNonJson } from '../http/requests';
 import { type Lang, resolveLang, t } from '../i18n';
 import { renderComponentTemplate, renderDocument } from '../site';
-import { cardColSpans } from './card-layout';
+import { projectArt } from './project-art';
 import { projectIcon } from './project-icons';
 import { PROJECT_LIMITS, parseNewProject, parseProjectChanges } from './project-input';
 
@@ -39,22 +39,12 @@ async function renderContentHtml(value: string | null) {
   return content;
 }
 
-function renderPhotoTags(tags: string[]) {
+function renderCoverTags(tags: string[], lang: Lang) {
   if (tags.length === 0) {
     return '';
   }
 
-  const chips = tags
-    .map((tag, index) => {
-      const escapedTag = escapeHtml(tag);
-      if (index === 0) {
-        return `<span class="px-2 py-1 bg-primary-container text-on-primary-container text-[10px] font-mono font-bold uppercase">${escapedTag}</span>`;
-      }
-      return `<span class="px-2 py-1 bg-white/10 text-white text-[10px] font-mono font-bold uppercase backdrop-blur-md border border-white/10">${escapedTag}</span>`;
-    })
-    .join('');
-
-  return `<div class="flex flex-wrap gap-2 mb-4">${chips}</div>`;
+  return `<ul class="project-technologies" aria-label="${lang === 'ru' ? 'Технологии' : 'Technologies'}">${tags.map((tag) => `<li>${escapeHtml(tag)}</li>`).join('')}</ul>`;
 }
 
 function renderPlainTags(tags: string[]) {
@@ -71,56 +61,53 @@ function renderPlainTags(tags: string[]) {
   return `<div class="flex flex-wrap gap-2 pt-2">${chips}</div>`;
 }
 
-function renderHiddenBadge(isHidden: boolean, lang: Lang) {
+function renderHiddenBadge(isHidden: boolean, lang: Lang, projectId: number) {
   if (!isHidden) {
     return '';
   }
 
-  return `<span class="inline-flex items-center px-2 py-0.5 bg-secondary/10 text-secondary border border-secondary/30 text-[10px] font-mono font-bold uppercase tracking-wider">${escapeHtml(t(lang, 'visibilityHidden'))}</span>`;
+  return `<span id="project-visibility-${projectId}" class="inline-flex items-center px-2 py-0.5 bg-secondary/10 text-secondary border border-secondary/30 text-[10px] font-mono font-bold uppercase tracking-wider">${escapeHtml(t(lang, 'visibilityHidden'))}</span>`;
 }
 
-async function renderProjectCard(project: ProjectRecord, index: number, total: number, lang: Lang) {
-  const colSpan = cardColSpans(total)[index] ?? 12;
-  const colSpanClass = `md:col-span-${colSpan}`;
+async function renderProjectCard(project: ProjectRecord, lang: Lang) {
   const name = escapeHtml(project.name);
   const description = escapeHtml(project.description?.trim() || t(lang, 'projectNoDescription'));
-  const image = project.image?.trim();
+  const art = projectArt(project.image);
   const viewProjectText = escapeHtml(t(lang, 'viewProject'));
   const tags = project.tags;
-  const hiddenBadge = renderHiddenBadge(project.isHidden, lang);
-  const isWide = colSpan === 12;
+  const hiddenBadge = renderHiddenBadge(project.isHidden, lang, project.id);
+  // Sources are activated near the viewport: native lazy-loading alone may fetch all
+  // three large originals on mobile. The gallery's observer also handles HTMX swaps.
+  const pictureHtml = art
+    ? `<picture>
+        ${art.webp ? `<source type="image/webp" data-srcset="${escapeHtml(art.webp)}">` : ''}
+        <img data-project-cover data-src="${escapeHtml(art.image)}" width="${art.width}" height="${art.height}" loading="lazy" decoding="async" alt="">
+      </picture>`
+    : '';
 
-  if (image) {
-    return renderComponentTemplate(isWide ? 'projects/card-photo-wide.html' : 'projects/card-photo.html', {
-      colSpanClass,
-      description,
-      hiddenBadge,
-      image: escapeHtml(image),
-      name,
-      projectHref: `/projects/${project.id}`,
-      tagsHtml: renderPhotoTags(tags),
-      viewProjectText,
-    });
-  }
-
-  return renderComponentTemplate(isWide ? 'projects/card-plain-wide.html' : 'projects/card-plain.html', {
-    colSpanClass,
+  return renderComponentTemplate('projects/card.html', {
     description,
     hiddenBadge,
+    visibilityDescription: project.isHidden ? `aria-describedby="project-visibility-${project.id}"` : '',
     icon: escapeHtml(projectIcon(project)),
     name,
+    pictureHtml,
+    projectId: String(project.id),
     projectHref: `/projects/${project.id}`,
-    tagsHtml: renderPlainTags(tags),
+    tagsHtml: renderCoverTags(tags, lang),
     viewProjectText,
   });
 }
 
 async function renderProjectsFragment(projects: ProjectRecord[], lang: Lang) {
   if (projects.length === 0) {
-    return renderComponentTemplate('projects/empty-state.html');
+    return renderComponentTemplate('projects/empty-state.html', {
+      emptyTitle: lang === 'ru' ? 'Пока нет опубликованных проектов' : 'No published projects yet',
+      emptyDescription: lang === 'ru' ? 'Новые проекты появятся здесь.' : 'There are no published entries to display yet.',
+    });
   }
 
-  return (await Promise.all(projects.map((project, index) => renderProjectCard(project, index, projects.length, lang)))).join('');
+  return (await Promise.all(projects.map((project) => renderProjectCard(project, lang)))).join('');
 }
 
 async function renderProjectEditor() {

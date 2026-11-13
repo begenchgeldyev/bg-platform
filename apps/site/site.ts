@@ -13,6 +13,7 @@ type PageConfig = {
   includeCvLink?: boolean;
   selectionTextClass?: string;
   showTerminalIcon?: boolean;
+  pageTransitions?: boolean;
 };
 
 const APP_DIR = import.meta.dir;
@@ -31,6 +32,7 @@ const MIME: Record<string, string> = {
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
   '.ttf': 'font/ttf',
+  '.webp': 'image/webp',
   '.woff2': 'font/woff2',
 };
 
@@ -174,6 +176,7 @@ async function renderLayout(config: PageConfig, content: string, lang: Lang) {
     footer: await renderFooter(config, lang),
     header: await renderHeader(config, lang),
     lang,
+    pageTransitions: config.pageTransitions === false ? '' : await renderComponentTemplate('page-transitions.html'),
     selectionTextClass,
     sharedHead: await renderSharedHead(),
     title: config.title[lang],

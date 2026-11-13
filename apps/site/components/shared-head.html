@@ -1,3 +1,7 @@
+<link rel="icon" type="image/png" sizes="16x16" href="/public/favicon-16.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/public/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/public/icon-192.png">
+<link rel="apple-touch-icon" type="image/png" sizes="180x180" href="/public/apple-touch-icon.png">
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <!-- Like htmx 2, don't swap 4xx/5xx response bodies into the page. htmx reads this once on load: keep it above the script. -->
 <meta name="htmx-config" content='{"noSwap": [204, 304, "4xx", "5xx"]}'>
@@ -147,6 +151,7 @@ button:focus-visible {
 }
 #terminal-body {
   overflow-wrap: anywhere;
+  overflow-anchor: none;
 }
 .terminal-help > div {
   display: grid;
@@ -175,6 +180,45 @@ button:focus-visible {
     opacity: 0;
   }
 }
+.terminal-pixels {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 3px;
+}
+.terminal-pixels[hidden] {
+  display: none;
+}
+.terminal-pixels > span {
+  width: 4px;
+  height: 4px;
+  background-color: #00ff41;
+  opacity: 0.35;
+  animation: terminal-pixel 900ms linear infinite;
+}
+.terminal-pixels > span:nth-child(2) {
+  animation-delay: -600ms;
+}
+.terminal-pixels > span:nth-child(3) {
+  animation-delay: -300ms;
+}
+@keyframes terminal-pixel {
+  from,
+  to {
+    opacity: 0.35;
+  }
+  16.667% {
+    opacity: 1;
+  }
+  33.333% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .terminal-pixels > span {
+    animation: none;
+    opacity: 0.65;
+  }
+}
 body {
   background-color: #0a0a0a;
   cursor: crosshair;
@@ -182,8 +226,14 @@ body {
 #terminal-input {
   -webkit-appearance: none;
   appearance: none;
+  font-size: inherit;
+  line-height: inherit;
+  caret-color: #00ff41;
   font-family:
     "OpenTUI Mono", "Noto Sans Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+}
+#terminal-input[readonly] {
+  caret-color: transparent;
 }
 #terminal-input:focus {
   outline: none;

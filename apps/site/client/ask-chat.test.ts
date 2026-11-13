@@ -3,7 +3,7 @@ import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV4 } from 'ai/test';
 import { AskController } from '../ask/ask.controller';
 import { createRateLimiter } from '../http/rate-limit';
-import { type AskChat, createAskChat } from './ask-chat';
+import { type AskChat, createAskChat, plainTextHistory } from './ask-chat';
 
 const model = new MockLanguageModelV4({
   doStream: async () => ({
@@ -99,17 +99,98 @@ describe('createAskChat', () => {
     });
     const chat = chatAgainstServer(10, flaky);
     const failed = await ask(chat, 'first');
-    expect(failed.error).toBe('The assistant hit an error. Try again later.');
+    expect(failed.error).toBe('the assistant is unavailable');
     const retried = await ask(chat, 'second');
     expect(retried.texts.at(-1)).toBe('Recovered.');
     expect(flaky.doStreamCalls[1].prompt.map((entry) => entry.role)).toEqual(['system', 'user']);
   });
 
-  test('reports the server error message and is ready for the next question', async () => {
+  test('reports the safe rate-limit message and is ready for the next question', async () => {
     const chat = chatAgainstServer(1);
     await ask(chat, 'first');
     const failed = await ask(chat, 'second');
     expect(failed.error).toBe('rate limit reached, try again in a few minutes');
     expect(chat.busy()).toBe(false);
+  });
+
+  test('reports the safe question-length validation message and rolls back the failed turn', async () => {
+    const chat = chatAgainstServer(10);
+    expect((await ask(chat, 'x'.repeat(501))).error).toBe('questions are limited to 500 characters');
+    expect(chat.busy()).toBe(false);
+    const recovered = await ask(chat, 'A valid question');
+    expect(recovered.error).toBeUndefined();
+    expect(model.doStreamCalls.at(-1)?.prompt.map((entry) => entry.role)).toEqual(['system', 'user']);
+  });
+
+  test('does not relay unknown messages, mismatched status/message pairs, malformed JSON or HTML', async () => {
+    const cases: [number, unknown][] = [
+      [429, { error: 'SECRET <img src=x>' }],
+      [400, { error: 'questions are limited to 500 characters <script>SECRET</script>' }],
+      [400, { error: 'rate limit reached, try again in a few minutes' }],
+      [429, { error: 'questions are limited to 500 characters' }],
+      [500, { error: 'rate limit reached, try again in a few minutes' }],
+      [503, { error: 'questions are limited to 500 characters' }],
+      [400, { error: { message: 'questions are limited to 500 characters' } }],
+      [429, '<html>SECRET stack trace</html>'],
+      [400, 'not json'],
+    ];
+    for (const [status, body] of cases) {
+      const server = Bun.serve({
+        port: 0,
+        fetch: () => (typeof body === 'string' ? new Response(body, { status }) : Response.json(body, { status })),
+      });
+      servers.push(server);
+      const chat = createAskChat({ api: new URL('/api/ask', server.url).href });
+      expect((await ask(chat, 'hello')).error).toBe('the assistant is unavailable');
+    }
+  });
+
+  test('normalizes text-only history before capping, dropping empty tool-only turns and all metadata', () => {
+    const messages = Array.from({ length: 25 }, (_, i) => ({
+      id: String(i),
+      role: 'user' as const,
+      parts: [{ type: 'text' as const, text: `q${i}` }],
+    }));
+    const result = plainTextHistory([
+      ...messages,
+      { id: 'tool-only', role: 'assistant', parts: [{ type: 'step-start' }] },
+      {
+        id: 'text',
+        role: 'assistant',
+        metadata: { secret: 'not sent' },
+        parts: [
+          { type: 'step-start' },
+          { type: 'text', text: 'A', providerMetadata: { openai: { itemId: 'SECRET' } } },
+          { type: 'text', text: 'B' },
+        ],
+      },
+    ]);
+    expect(result.length).toBe(20);
+    expect(result[0]?.id).toBe('6');
+    expect(result.at(-1)).toEqual({ id: 'text', role: 'assistant', parts: [{ type: 'text', text: 'AB' }] });
+    expect(JSON.stringify(result)).not.toContain('SECRET');
+    expect(JSON.stringify(result)).not.toContain('tool-only');
+  });
+
+  test('never displays arbitrary server/provider details on errors', async () => {
+    const server = Bun.serve({ port: 0, fetch: () => Response.json({ error: 'SECRET <img src=x>' }, { status: 500 }) });
+    servers.push(server);
+    const chat = createAskChat({ api: new URL('/api/ask', server.url).href });
+    expect((await ask(chat, 'hello')).error).toBe('the assistant is unavailable');
+  });
+
+  test('raw streamed provider errors stay generic even when their text matches a safe HTTP error', async () => {
+    for (const errorText of ['SECRET provider stack <img src=x>', 'rate limit reached, try again in a few minutes']) {
+      const server = Bun.serve({
+        port: 0,
+        fetch: () =>
+          new Response(`data: ${JSON.stringify({ type: 'error', errorText })}\n\ndata: [DONE]\n\n`, {
+            headers: { 'Content-Type': 'text/event-stream', 'x-vercel-ai-ui-message-stream': 'v1' },
+          }),
+      });
+      servers.push(server);
+      const chat = createAskChat({ api: new URL('/api/ask', server.url).href });
+      expect((await ask(chat, 'hello')).error).toBe('the assistant is unavailable');
+    }
   });
 });

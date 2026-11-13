@@ -1,0 +1,22 @@
+<article class="project-card">
+  <a
+    href="{{ projectHref }}"
+    class="project-card-link"
+    aria-labelledby="project-title-{{ projectId }} project-action-{{ projectId }}"
+    {{ visibilityDescription }}>
+    <div class="project-cover" aria-hidden="true">
+      <div class="project-cover-fallback"><span class="material-symbols-outlined">{{ icon }}</span></div>
+      {{ pictureHtml }}
+    </div>
+    <div class="project-card-body">
+      {{ hiddenBadge }}
+      <h2 id="project-title-{{ projectId }}">{{ name }}</h2>
+      <p class="project-description">{{ description }}</p>
+      {{ tagsHtml }}
+      <span class="project-card-action" id="project-action-{{ projectId }}">
+        {{ viewProjectText }}
+        <span aria-hidden="true">→</span>
+      </span>
+    </div>
+  </a>
+</article>

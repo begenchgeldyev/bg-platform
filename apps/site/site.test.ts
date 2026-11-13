@@ -86,7 +86,7 @@ describe('russian fragments', () => {
     const res = await renderPage('/', 'ru');
     const html = await (res as Response).text();
     expect(html).toContain('Окружение');
-    expect(html).toContain('terminal-display');
+    expect(html).toContain('id="terminal-input"');
   });
 });
 
