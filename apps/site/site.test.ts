@@ -93,12 +93,32 @@ describe('russian fragments', () => {
   test('serves Russian copy on the home page', async () => {
     const res = await renderPage('/', 'ru');
     const html = await (res as Response).text();
-    expect(html).toContain('Окружение');
+    expect(html).toContain('aria-label="Статус сессии"');
     expect(html).toContain('id="terminal-input"');
   });
 });
 
 describe('home page', () => {
+  test.each([
+    { lang: 'en', label: 'Session status', tenure: 'shipping since 2021' },
+    { lang: 'ru', label: 'Статус сессии', tenure: 'в проде с 2021' },
+  ] as const)('renders the final status bar and tenure badge ($lang)', async ({ lang, label, tenure }) => {
+    const res = await renderPage('/', lang);
+    expect(res).not.toBeNull();
+    const html = await (res as Response).text();
+    const terminalStart = html.indexOf('id="terminal-wrap"');
+    expect(terminalStart).toBeGreaterThan(-1);
+    const terminal = html.slice(terminalStart, html.indexOf('</section>', terminalStart));
+    expect(terminal).toContain(`aria-label="${label}"`);
+    for (const content of ['stack:', 'now:', 'pantheon', 'utc+7']) {
+      expect(terminal).toContain(content);
+    }
+    expect(html).toContain(tenure);
+    for (const removed of ['Stats Grid', 'Availability', 'Окружение', 'prototype', 'herdr / opencode']) {
+      expect(html).not.toContain(removed);
+    }
+  });
+
   test.each(['en', 'ru'] as const)('no longer renders the selected works section (%s)', async (lang) => {
     const res = await renderPage('/', lang);
     expect(res).not.toBeNull();
