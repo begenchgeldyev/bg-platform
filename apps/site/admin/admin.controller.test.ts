@@ -58,7 +58,7 @@ describe('AdminController', () => {
     const html = await response.text();
     expect(html).toContain('<html class="dark" lang="en">');
     expect(html).toContain('>Projects<');
-    expect(html).toContain('<title>ADMIN — BEGENCH_GELDYEV@ROOT:~$</title>');
+    expect(html).toContain('<title>admin — begench_geldyev@root:~$</title>');
     expect(html).not.toContain('type="speculationrules"');
     expect(html).not.toContain('@view-transition');
     expect(html).toContain(

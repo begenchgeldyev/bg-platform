@@ -318,6 +318,7 @@ async function renderLayout(config: LayoutConfig, content: string, lang: Lang) {
     selectionTextClass,
     sharedHead: await renderSharedHead(),
     title: config.title[lang]
+      .toLowerCase()
       .replaceAll('&', '&amp;')
       .replaceAll('<', '&lt;')
       .replaceAll('>', '&gt;')

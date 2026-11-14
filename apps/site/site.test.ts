@@ -37,6 +37,24 @@ describe('renderPage language selection', () => {
   });
 });
 
+describe('static document titles', () => {
+  test.each([
+    { pathname: '/', lang: 'en', title: 'begenchgeldyev' },
+    { pathname: '/', lang: 'ru', title: 'begenchgeldyev' },
+    { pathname: '/cv', lang: 'en', title: 'cv — begench_geldyev@root:~$' },
+    { pathname: '/cv', lang: 'ru', title: 'резюме — begench_geldyev@root:~$' },
+    { pathname: '/logs', lang: 'en', title: 'logs — begench_geldyev@root:~$' },
+    { pathname: '/logs', lang: 'ru', title: 'логи — begench_geldyev@root:~$' },
+    { pathname: '/projects', lang: 'en', title: 'projects — begench_geldyev@root:~$' },
+    { pathname: '/projects', lang: 'ru', title: 'проекты — begench_geldyev@root:~$' },
+  ] as const)('renders a lowercase title for $pathname ($lang)', async ({ pathname, lang, title }) => {
+    const response = await renderPage(pathname, lang);
+    expect(response).not.toBeNull();
+    const html = await (response as Response).text();
+    expect(html.match(/<title>(.*?)<\/title>/)?.[1]).toBe(title);
+  });
+});
+
 describe('include resolution', () => {
   test('resolves an include whose filename contains a hyphen', async () => {
     const res = await renderPage('/cv', 'en');
@@ -243,10 +261,21 @@ describe('public asset ranges', () => {
 });
 
 describe('dynamic document policy', () => {
+  test.each(['project', 'admin'] as const)('lowercases mixed-case Latin and Cyrillic %s titles without changing the body', async (page) => {
+    const response = await rendering.renderDynamicPage(withHeaders('/fixture', { cookie: 'lang=ru' }), {
+      page,
+      title: 'MiXeD ПроЕкт ЁЖ — BEGENCH_GELDYEV@ROOT:~$',
+      contentHtml: '<main><h1>MiXeD ПроЕкт ЁЖ</h1></main>',
+    });
+    const html = await response.text();
+    expect(html).toContain('<title>mixed проект ёж — begench_geldyev@root:~$</title>');
+    expect(html).toContain('<main><h1>MiXeD ПроЕкт ЁЖ</h1></main>');
+  });
+
   test.each(['project', 'admin'] as const)('escapes raw %s titles once and preserves trusted body HTML', async (page) => {
     const response = await rendering.renderDynamicPage(new Request('http://localhost/fixture'), {
       page,
-      title: '</title><script>evil()</script> & "raw" &amp;',
+      title: '</TITLE><SCRIPT>EVIL()</SCRIPT> & "RaW" \'Quote\' &amp;',
       contentHtml: '<main><strong data-trusted="yes">Intentional HTML &amp; text</strong></main>',
     });
     expect(response.status).toBe(200);
@@ -254,7 +283,10 @@ describe('dynamic document policy', () => {
     expect(response.headers.get('cache-control')).toBe('no-store');
     expect(response.headers.get('etag')).toBeNull();
     const html = await response.text();
-    expect(html).toContain('<title>&lt;/title&gt;&lt;script&gt;evil()&lt;/script&gt; &amp; &quot;raw&quot; &amp;amp;</title>');
+    expect(html).toContain(
+      '<title>&lt;/title&gt;&lt;script&gt;evil()&lt;/script&gt; &amp; &quot;raw&quot; &#39;quote&#39; &amp;amp;</title>',
+    );
+    expect(html).not.toContain('<SCRIPT>EVIL()');
     expect(html).not.toContain('<script>evil()');
     expect(html).toContain('<main><strong data-trusted="yes">Intentional HTML &amp; text</strong></main>');
   });

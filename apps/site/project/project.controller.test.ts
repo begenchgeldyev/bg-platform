@@ -171,8 +171,20 @@ describe('ProjectController.getPageById', () => {
   test('escapes raw ampersands and hostile titles exactly once through the controller', async () => {
     const subject = controller({ projects: [project({ name: 'A & B </title><script>evil()</script>' })] });
     const html = await (await subject.controller.getPageById(new Request('http://localhost/projects/1'), 1)).text();
-    expect(html).toContain('<title>A &amp; B &lt;/TITLE&gt;&lt;SCRIPT&gt;EVIL()&lt;/SCRIPT&gt; — BEGENCH_GELDYEV@ROOT:~$</title>');
-    expect(html).not.toContain('A &amp;amp; B');
+    expect(html).toContain('<title>a &amp; b &lt;/title&gt;&lt;script&gt;evil()&lt;/script&gt; — begench_geldyev@root:~$</title>');
+    expect(html).not.toContain('a &amp;amp; b');
+  });
+
+  test.each(['en', 'ru'] as const)('lowercases the tab title but preserves the project heading and stored name (%s)', async (lang) => {
+    const item = project({ name: 'MiXeD ПроЕкт ЁЖ' });
+    const subject = controller({ projects: [item] });
+    const request = new Request('http://localhost/projects/1', { headers: { cookie: `lang=${lang}` } });
+    const html = await (await subject.controller.getPageById(request, 1)).text();
+
+    expect(html).toContain('<title>mixed проект ёж — begench_geldyev@root:~$</title>');
+    expect(html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/)?.[1]?.trim()).toBe('MiXeD ПроЕкт ЁЖ');
+    expect(item.name).toBe('MiXeD ПроЕкт ЁЖ');
+    expect(subject.repository.updates).toEqual([]);
   });
 
   test("a hidden project's page is 404 for visitors and 200 for the owner", async () => {
@@ -202,9 +214,9 @@ describe('ProjectController.getPageById', () => {
     const subject = controller({ projects: [project({ id: 1, name })], canEdit: false });
     const html = await (await subject.controller.getPageById(new Request('http://localhost/projects/1'), 1)).text();
 
-    expect(html).toContain('&lt;/TITLE&gt;&lt;SCRIPT&gt;ALERT(1)&lt;/SCRIPT&gt;');
-    expect(html).not.toContain('</TITLE><SCRIPT>');
-    expect(html).not.toContain('<SCRIPT>ALERT');
+    expect(html).toContain('<title>&lt;/title&gt;&lt;script&gt;alert(1)&lt;/script&gt; — begench_geldyev@root:~$</title>');
+    expect(html).not.toContain('</title><script>');
+    expect(html).not.toContain('<script>alert');
   });
 
   test('renders tag chips when project has tags, and nothing when empty', async () => {
