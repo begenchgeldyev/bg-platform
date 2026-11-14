@@ -150,8 +150,8 @@ describe('static document titles', () => {
   test.each([
     { pathname: '/', lang: 'en', title: 'begenchgeldyev' },
     { pathname: '/', lang: 'ru', title: 'begenchgeldyev' },
-    { pathname: '/cv', lang: 'en', title: 'cv — begench_geldyev@root:~$' },
-    { pathname: '/cv', lang: 'ru', title: 'резюме — begench_geldyev@root:~$' },
+    { pathname: '/resume', lang: 'en', title: 'resume — begench_geldyev@root:~$' },
+    { pathname: '/resume', lang: 'ru', title: 'резюме — begench_geldyev@root:~$' },
     { pathname: '/logs', lang: 'en', title: 'logs — begench_geldyev@root:~$' },
     { pathname: '/logs', lang: 'ru', title: 'логи — begench_geldyev@root:~$' },
     { pathname: '/projects', lang: 'en', title: 'projects — begench_geldyev@root:~$' },
