@@ -22,6 +22,10 @@ _Avoid_: photo, thumbnail, cover, screenshot
 The Material Symbol name stored on a project. When it is empty the icon is Automatic: guessed from the project's name and description when the page is rendered.
 _Avoid_: logo, glyph, symbol
 
+**Site icon**:
+The portrait identifying the site in browser tabs and bookmarks, distinct from a project's Icon.
+_Avoid_: project icon (when referring to the site), logo
+
 **Tags**:
 Free-text labels on a project, stored on the project itself and shown on its card.
 _Avoid_: stack, stack lines, skills, keywords, topics
