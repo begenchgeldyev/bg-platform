@@ -1,3 +1,33 @@
+# Site icon runtime checks
+
+The shared head serves static open-eye PNGs without JavaScript. With JavaScript,
+only the 32px and 192px links blink after a randomized 4–7-second idle: eyes close
+for 150ms, with a 10% chance of a second blink after a 150ms open gap. Hidden tabs
+hold closed eyes and cancel timers; returning opens the eyes immediately and
+starts a fresh idle. Reduced motion disables timed blinks, including when the
+preference changes, but retains visibility-driven states. Closed frames are
+preloaded; a failed preload preserves the static open-eye links. The 16px and
+opaque Apple touch icons stay static. Browser icon selection and tab-strip repaint
+are browser-dependent, so link updates do not guarantee visible animation.
+
+All six site icon image URLs share `?v=portrait-blink-1`, including static hrefs
+and runtime open/closed data references. This bypasses older cached portraits so
+returning visitors do not blink between different portrait generations. Bump the
+version consistently across all six URLs when replacing the portrait assets.
+
+```sh
+bun test apps/site/favicon-blink.test.ts
+```
+
+These deterministic Bun tests execute the shipped deferred script with controlled
+timers, randomness, image preloads, visibility and reduced-motion preferences.
+They cover single/double blink timing, cancellation at every phase, stale callbacks,
+repeated events, initial hidden/reduced-motion state, preload failure, unrelated
+links, and static no-JavaScript markup shared by public pages and admin. They do
+not establish actual browser tab-strip repaint or image HTTP availability; those
+require separate HTTP checks and real-browser visual acceptance. The 16px icon and
+Apple touch icon remain static even when the runtime is enabled.
+
 # Browser motion checks
 
 Run the site on a free port, then use the existing Playwright and Chromium installation.
