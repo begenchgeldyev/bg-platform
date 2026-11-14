@@ -1,13 +1,14 @@
 // SITE_URL=http://localhost:8681 PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs bun apps/site/tests/projects-motion.browser.ts
-// Authored image-motion behavior on the real gallery page and a rendered project page.
+// Animated WebP scenes on the real gallery page and rendered project pages.
 // The gallery API and the detail route use fixtures because local Postgres is optional.
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
+import { projectArt } from '../project/project-art';
 import { renderComponentTemplate, renderDocument } from '../site';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const baseURL = process.env.SITE_URL || 'http://localhost:8681';
-const output = process.env.EVIDENCE_DIR || '/tmp/opencode/projects-motion';
+const output = process.env.EVIDENCE_DIR || '/tmp/opencode/project-animated-webp/browser';
 const executablePath = process.env.CHROMIUM_PATH || '/usr/bin/chromium';
 await mkdir(output, { recursive: true });
 
@@ -36,7 +37,8 @@ function fill(template: string, values: Record<string, string>) {
 }
 
 function card(id: number, name: string, base: string) {
-  const picture = `<picture>${sources(base, CARD_SIZES, true)}<img data-project-cover data-src="${base}.png" width="1448" height="1086" loading="lazy" decoding="async" alt=""></picture>`;
+  const motion = projectArt(`${base}.png`)?.motion;
+  const picture = `<picture>${sources(base, CARD_SIZES, true)}<img data-project-cover${motion ? ` data-project-motion="${motion.card}"` : ''} data-src="${base}.png" width="1448" height="1086" loading="lazy" decoding="async" alt=""></picture>`;
   return fill(cardTemplate, {
     description: `${name} fixture description`,
     hiddenBadge: '',
@@ -52,8 +54,9 @@ function card(id: number, name: string, base: string) {
 }
 
 async function detailFixture(base: string, content: string) {
+  const motion = projectArt(`${base}.png`)?.motion;
   const imageBlock = `<div class="overflow-hidden border border-outline-variant/30 bg-surface">
-    <picture>${sources(base, DETAIL_SIZES, false)}<img data-project-preview class="max-h-[520px] w-full object-cover" src="${base}.png" width="1448" height="1086" fetchpriority="high" decoding="async" alt="Pantheon preview"></picture>
+    <picture>${sources(base, DETAIL_SIZES, false)}<img data-project-preview${motion ? ` data-project-motion="${motion.page}"` : ''} class="max-h-[520px] w-full object-cover" src="${base}.png" width="1448" height="1086" fetchpriority="high" decoding="async" alt="Project preview"></picture>
   </div>`;
   const pageHtml = await renderComponentTemplate('projects/page.html', {
     adminControls: '',
@@ -106,25 +109,40 @@ async function check(name: string, run: () => Promise<unknown>) {
 
 type BrowserContext = Awaited<ReturnType<typeof browser.newContext>>;
 type BrowserPage = Awaited<ReturnType<typeof browser.newPage>>;
+// The optional external Playwright import has no repository-local declarations.
+type BrowserRoute = {
+  abort(): Promise<void>;
+  continue(): Promise<void>;
+  fulfill(options: { status?: number; contentType: string; body: string }): Promise<void>;
+};
 
 async function openPage(context: BrowserContext) {
   const page = await context.newPage();
   page.setDefaultTimeout(6000);
-  await page.route('**/api/ask**', (route) => {
+  await page.route('**/api/ask**', (route: BrowserRoute) => {
     aiRequests++;
     return route.abort();
   });
   return page;
 }
 
+function motionRequests(page: BrowserPage) {
+  const urls: string[] = [];
+  page.on('request', (request: { url(): string }) => {
+    if (/-motion-\d+\.webp/.test(request.url())) urls.push(request.url());
+  });
+  return urls;
+}
+
 async function probe(page: BrowserPage, kind: 'card' | 'detail') {
-  return page.evaluate((surface) => {
+  return page.evaluate((surface: 'card' | 'detail') => {
     const image = document.querySelector<HTMLImageElement>(surface === 'card' ? '[data-project-cover]' : '[data-project-preview]');
     const frame = surface === 'card' ? image?.closest('.project-cover') : image?.closest('picture')?.parentElement;
     if (!image || !frame) return null;
     const after = getComputedStyle(frame, '::after');
     const before = getComputedStyle(frame, '::before');
     const animations = frame.getAnimations({ subtree: true });
+    const scene = frame.querySelector<HTMLImageElement>('[data-project-scene]');
     const rect = frame.getBoundingClientRect();
     return {
       attr: frame.getAttribute('data-image-motion'),
@@ -137,7 +155,8 @@ async function probe(page: BrowserPage, kind: 'card' | 'detail') {
         name: animation instanceof CSSAnimation ? animation.animationName : null,
         playState: animation.playState,
       })),
-      running: animations.some((animation) => animation.playState === 'running'),
+      running: Boolean(scene?.getAttribute('src') && !scene.hidden && scene.naturalWidth > 0),
+      scene: scene ? { src: scene.getAttribute('src'), width: scene.naturalWidth, hidden: scene.hidden } : null,
       overlayNodes: frame.querySelectorAll('[data-image-motion-layer], canvas, svg').length,
       rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
       image: {
@@ -155,7 +174,7 @@ async function probe(page: BrowserPage, kind: 'card' | 'detail') {
 
 async function waitForAttr(page: BrowserPage, kind: 'card' | 'detail', value: string | null) {
   await page.waitForFunction(
-    ({ surface, expected }) => {
+    ({ surface, expected }: { surface: 'card' | 'detail'; expected: string | null }) => {
       const image = document.querySelector<HTMLImageElement>(surface === 'card' ? '[data-project-cover]' : '[data-project-preview]');
       const frame = surface === 'card' ? image?.closest('.project-cover') : image?.closest('picture')?.parentElement;
       if (!frame) return false;
@@ -165,43 +184,22 @@ async function waitForAttr(page: BrowserPage, kind: 'card' | 'detail', value: st
   );
 }
 
-async function freezeAt(page: BrowserPage, kind: 'card' | 'detail', at: number) {
-  await page.evaluate(
-    ({ surface, time }) => {
-      const image = document.querySelector<HTMLImageElement>(surface === 'card' ? '[data-project-cover]' : '[data-project-preview]');
-      const frame = surface === 'card' ? image?.closest('.project-cover') : image?.closest('picture')?.parentElement;
-      for (const animation of frame?.getAnimations({ subtree: true }) ?? []) {
-        animation.pause();
-        animation.currentTime = time;
-      }
-    },
-    { surface: kind, time: at },
-  );
-}
-
-async function resume(page: BrowserPage, kind: 'card' | 'detail') {
-  await page.evaluate((surface) => {
-    const image = document.querySelector<HTMLImageElement>(surface === 'card' ? '[data-project-cover]' : '[data-project-preview]');
-    const frame = surface === 'card' ? image?.closest('.project-cover') : image?.closest('picture')?.parentElement;
-    for (const animation of frame?.getAnimations({ subtree: true }) ?? []) animation.play();
-  }, kind);
-}
-
 function assertIdle(state: Awaited<ReturnType<typeof probe>>, expected: string | null) {
   assert.ok(state, 'image frame must exist');
   assert.equal(state.attr, expected, 'frame must hold the documented idle state');
   assert.equal(state.running, false, 'idle frame must have no running animation');
   assert.equal(state.animations.length, 0, 'idle frame must have no animations');
   assert.equal(state.afterAnimation, 'none', 'idle overlay must have no animation');
-  if (expected !== null) assert.equal(state.beforeOpacity, '0', 'idle corner cue must be hidden');
+  assert.equal(state.scene, null, 'idle frame must release its animated image');
   return state;
 }
 
 function galleryRoute(context: BrowserContext, body: string) {
-  return context.route('**/api/projects', (route) => route.fulfill({ status: 200, contentType: 'text/html', body }));
+  return context.route('**/api/projects', (route: BrowserRoute) => route.fulfill({ status: 200, contentType: 'text/html', body }));
 }
 
 try {
+  assert.equal((await fetch(`${baseURL}/public/assets/tailwind.css`)).status, 200, 'build the site CSS before browser verification');
   const detailHtml = await detailFixture(PANTHEON, detailBody);
   const failedDetailHtml = await detailFixture('/public/projects/missing-pixel', detailBody);
   await Bun.write(`${output}/detail-fixture.html`, detailHtml);
@@ -210,6 +208,7 @@ try {
   await check('gallery hover starts authored motion only after the existing decode contract', async () => {
     const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
     const page = await openPage(context);
+    const requests = motionRequests(page);
     await galleryRoute(context, card(4, 'Pantheon', PANTHEON));
     try {
       await page.goto('/projects', { waitUntil: 'domcontentloaded' });
@@ -221,6 +220,7 @@ try {
       );
       await page.waitForFunction(() => document.querySelector<HTMLImageElement>('[data-project-cover]')?.dataset.loaded === 'true');
       const idle = assertIdle(await probe(page, 'card'), 'ready');
+      assert.equal(requests.length, 0, 'idle cards must not download animations');
       await page.screenshot({ path: shot('gallery-idle-1440') });
       assert.ok(idle.image.currentSrc.endsWith('.avif'), 'the responsive AVIF source must remain in use');
       await page.locator('.project-card').first().hover();
@@ -230,9 +230,9 @@ try {
       assert.equal(active.attr, 'active');
       assert.equal(active.mode, 'card');
       assert.equal(active.running, true, 'hover must run the authored animation');
-      assert.equal(active.afterAnimation, 'image-signal-sweep');
-      assert.ok(Number(active.beforeOpacity) > 0, 'hover must reveal the corner cue');
-      assert.equal(active.overlayNodes, 0, 'motion must not add image layers');
+      assert.equal(active.afterAnimation, 'none', 'the synthetic sweep must be gone');
+      assert.ok(active.scene?.src?.endsWith('-motion-480.webp'), 'hover must display the actual animated scene');
+      assert.equal(active.overlayNodes, 0, 'motion must not add decorative layers');
       assert.deepEqual(active.rect, idle.rect, 'activation must not move the cover');
       assert.equal(active.image.src, idle.image.src);
       assert.equal(active.image.currentSrc, idle.image.currentSrc);
@@ -241,13 +241,11 @@ try {
       const firstFrame = await page.locator('.project-cover').first().screenshot();
       await page.waitForTimeout(520);
       const secondFrame = await page.locator('.project-cover').first().screenshot();
-      assert.ok(!firstFrame.equals(secondFrame), 'the light cue must visibly move across the artwork');
+      assert.ok(!firstFrame.equals(secondFrame), 'decoded scene frames must visibly change without CSS animation');
       const later = await probe(page, 'card');
       assert.ok(later, 'card probe');
-      assert.notEqual(later.afterPosition, active.afterPosition, 'the stepped sweep must advance');
-      await freezeAt(page, 'card', 1000);
+      assert.equal(later.animations.length, 0, 'scene movement must not come from CSS animations');
       await page.screenshot({ path: shot('gallery-hover-1440') });
-      await resume(page, 'card');
       await page.mouse.move(4, 4);
       await waitForAttr(page, 'card', 'ready');
       const stopped = assertIdle(await probe(page, 'card'), 'ready');
@@ -273,16 +271,14 @@ try {
         await page
           .locator('.project-card-link')
           .first()
-          .evaluate((element) => element.matches(':focus-visible')),
+          .evaluate((element: Element) => element.matches(':focus-visible')),
         true,
       );
-      await freezeAt(page, 'card', 1000);
       await page.screenshot({ path: shot('gallery-focus-1440') });
-      await resume(page, 'card');
       await page
         .locator('.project-card-link')
         .first()
-        .evaluate((element) => (element as HTMLElement).blur());
+        .evaluate((element: HTMLElement) => element.blur());
       await waitForAttr(page, 'card', 'ready');
       assertIdle(await probe(page, 'card'), 'ready');
     } finally {
@@ -312,7 +308,7 @@ try {
         });
       const show = () =>
         page.evaluate(() => {
-          delete (document as Document & { visibilityState?: string }).visibilityState;
+          Reflect.deleteProperty(document, 'visibilityState');
           document.dispatchEvent(new Event('visibilitychange'));
         });
 
@@ -340,7 +336,7 @@ try {
       await page
         .locator('.project-card-link')
         .first()
-        .evaluate((element) => (element as HTMLElement).blur());
+        .evaluate((element: HTMLElement) => element.blur());
       await waitForAttr(page, 'card', 'ready');
       await page.locator('.project-card').first().hover();
       await waitForAttr(page, 'card', 'active');
@@ -366,7 +362,7 @@ try {
         await page
           .locator('.project-card')
           .first()
-          .evaluate((element) => element.matches(':hover')),
+          .evaluate((element: Element) => element.matches(':hover')),
         true,
       );
     } finally {
@@ -408,7 +404,7 @@ try {
       const belowMinimumScroll = Math.round(geometry.top - (geometry.viewport - justInside));
       assert.ok(belowMinimumScroll > 0, 'the cover must sit far enough down the page to start partly outside');
       assert.ok(belowMinimumScroll < geometry.maxScroll, 'the page must scroll far enough for a sub-1% intersection');
-      await page.evaluate((y) => window.scrollTo(0, y), belowMinimumScroll);
+      await page.evaluate((y: number) => window.scrollTo(0, y), belowMinimumScroll);
       await page.waitForTimeout(180);
       const belowMinimum = await probe(page, 'card');
       assert.equal(belowMinimum?.attr, 'ready', 'a cover under 1% in view must stay idle');
@@ -417,14 +413,14 @@ try {
       await page
         .locator('.project-card-link')
         .first()
-        .evaluate((element) => (element as HTMLElement).focus({ preventScroll: true }));
+        .evaluate((element: HTMLElement) => element.focus({ preventScroll: true }));
       assert.equal(await page.evaluate(() => window.scrollY), belowMinimumScroll, 'focus must not move the cover into view');
       assert.equal((await probe(page, 'card'))?.attr, 'ready', 'focus alone cannot activate a cover below the 1% minimum');
 
       // Scroll to a ratio between the card minimum (1%) and the page threshold (35%).
       const betweenScroll = belowMinimumScroll + Math.round(geometry.height * 0.1);
       assert.ok(betweenScroll < geometry.maxScroll, 'the page must scroll far enough for a 10% intersection');
-      await page.evaluate((y) => window.scrollTo(0, y), betweenScroll);
+      await page.evaluate((y: number) => window.scrollTo(0, y), betweenScroll);
       const ratio = await page.evaluate(() => {
         const frame = document.querySelector('[data-project-cover]')?.closest('.project-cover');
         if (!frame) return 0;
@@ -450,6 +446,7 @@ try {
   await check('reduced motion stays static and follows a live preference change', async () => {
     const reduced = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
     const reducedPage = await openPage(reduced);
+    const requests = motionRequests(reducedPage);
     await galleryRoute(reduced, card(4, 'Pantheon', PANTHEON));
     try {
       await reducedPage.goto('/projects', { waitUntil: 'domcontentloaded' });
@@ -458,6 +455,7 @@ try {
       await reducedPage.locator('.project-card').first().hover();
       await reducedPage.waitForTimeout(260);
       assertIdle(await probe(reducedPage, 'card'), null);
+      assert.equal(requests.length, 0);
       await reducedPage.screenshot({ path: shot('gallery-reduced-1440') });
     } finally {
       await reduced.close();
@@ -488,6 +486,7 @@ try {
   await check('touch-only cards stay static and keep navigating', async () => {
     const context = await browser.newContext({ baseURL, viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
     const page = await openPage(context);
+    const requests = motionRequests(page);
     await galleryRoute(context, card(4, 'Pantheon', PANTHEON));
     try {
       await page.goto('/projects', { waitUntil: 'domcontentloaded' });
@@ -505,6 +504,7 @@ try {
       await page.waitForTimeout(260);
       assertIdle(await probe(page, 'card'), 'ready');
       await page.screenshot({ path: shot('gallery-narrow-coarse-390') });
+      assert.equal(requests.length, 0, 'touch cards must not request animated WebP');
       await page.locator('.project-card-link').first().click();
       await page.waitForURL('**/projects/4');
       assert.ok(page.url().includes('/projects/4'), 'the card must remain a working link');
@@ -516,7 +516,9 @@ try {
   await check('a project page animates while visible and stops when scrolled away or hidden', async () => {
     const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
     const page = await openPage(context);
-    await context.route('**/projects/4', (route) => route.fulfill({ status: 200, contentType: 'text/html', body: detailHtml }));
+    await context.route('**/projects/4', (route: BrowserRoute) =>
+      route.fulfill({ status: 200, contentType: 'text/html', body: detailHtml }),
+    );
     try {
       await page.goto('/projects/4', { waitUntil: 'domcontentloaded' });
       assert.equal(
@@ -532,12 +534,11 @@ try {
       const active = await probe(page, 'detail');
       assert.ok(active?.running, 'visible project image must run');
       assert.equal(active?.mode, 'page');
-      assert.equal(active?.afterAnimation, 'image-signal-sweep');
+      assert.equal(active?.afterAnimation, 'none');
+      assert.ok(active?.scene?.src?.endsWith('-motion-960.webp'));
       await page.evaluate(() => document.querySelector('[data-project-preview]')?.scrollIntoView({ block: 'center' }));
       await page.waitForTimeout(420);
-      await freezeAt(page, 'detail', 1600);
       await page.screenshot({ path: shot('detail-active-1440') });
-      await resume(page, 'detail');
       await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
       await waitForAttr(page, 'detail', 'ready');
       const offscreen = await probe(page, 'detail');
@@ -553,7 +554,7 @@ try {
       await waitForAttr(page, 'detail', null);
       assert.equal((await probe(page, 'detail'))?.running, false, 'hidden document must stop the sweep');
       await page.evaluate(() => {
-        delete (document as Document & { visibilityState?: string }).visibilityState;
+        Reflect.deleteProperty(document, 'visibilityState');
         document.dispatchEvent(new Event('visibilitychange'));
       });
       await waitForAttr(page, 'detail', 'active');
@@ -565,7 +566,10 @@ try {
   await check('reduced motion keeps project pages static', async () => {
     const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
     const page = await openPage(context);
-    await context.route('**/projects/4', (route) => route.fulfill({ status: 200, contentType: 'text/html', body: detailHtml }));
+    const requests = motionRequests(page);
+    await context.route('**/projects/4', (route: BrowserRoute) =>
+      route.fulfill({ status: 200, contentType: 'text/html', body: detailHtml }),
+    );
     try {
       await page.goto('/projects/4', { waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => {
@@ -574,6 +578,7 @@ try {
       });
       await page.waitForTimeout(300);
       assertIdle(await probe(page, 'detail'), null);
+      assert.equal(requests.length, 0);
       await page.screenshot({ path: shot('detail-reduced-1440') });
     } finally {
       await context.close();
@@ -583,7 +588,9 @@ try {
   await check('a failed image never receives decoration', async () => {
     const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
     const page = await openPage(context);
-    await context.route('**/projects/4', (route) => route.fulfill({ status: 200, contentType: 'text/html', body: failedDetailHtml }));
+    await context.route('**/projects/4', (route: BrowserRoute) =>
+      route.fulfill({ status: 200, contentType: 'text/html', body: failedDetailHtml }),
+    );
     try {
       await page.goto('/projects/4', { waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => {
@@ -604,7 +611,7 @@ try {
     const galleryContext = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
     const galleryPage = await openPage(galleryContext);
     await galleryRoute(galleryContext, card(4, 'Pantheon', PANTHEON));
-    await galleryContext.route('**/public/projects/*', (route) => route.abort());
+    await galleryContext.route('**/public/projects/*', (route: BrowserRoute) => route.abort());
     try {
       await galleryPage.goto('/projects', { waitUntil: 'domcontentloaded' });
       await galleryPage.waitForSelector('.project-card');
@@ -632,8 +639,11 @@ try {
       await page.goto('/projects', { waitUntil: 'domcontentloaded' });
       await page.waitForSelector('.project-card');
       await page.waitForFunction(() => document.querySelector<HTMLImageElement>('[data-project-cover]')?.dataset.loaded === 'true');
+      await page.locator('.project-card-link').first().focus();
+      await waitForAttr(page, 'card', 'active');
       await page.evaluate(() => {
         (window as Window & { oldFrame?: Element }).oldFrame = document.querySelector('.project-cover') ?? undefined;
+        (window as Window & { oldScene?: Element }).oldScene = document.querySelector('[data-project-scene]') ?? undefined;
       });
       for (let round = 0; round < 3; round++) {
         await page.evaluate((html: string) => {
@@ -650,10 +660,14 @@ try {
           oldConnected: oldFrame?.isConnected ?? false,
           scriptTags: document.querySelectorAll('script[src="/public/projects-motion.js"]').length,
           frames: document.querySelectorAll('.project-cover').length,
+          oldSceneSrc: (window as Window & { oldScene?: Element }).oldScene?.getAttribute('src'),
+          oldSceneConnected: (window as Window & { oldScene?: Element }).oldScene?.isConnected,
         };
       });
       assert.equal(cleaned.oldHasState, false, 'detached frames must lose their enhancement state');
       assert.equal(cleaned.oldConnected, false);
+      assert.equal(cleaned.oldSceneSrc, null, 'detached animations must lose their source, not just become hidden');
+      assert.equal(cleaned.oldSceneConnected, false);
       assert.equal(cleaned.scriptTags, 1, 'the shared script must not be duplicated');
       assert.equal(cleaned.frames, 2);
       await page.locator('.project-card').nth(1).hover();
@@ -664,10 +678,10 @@ try {
       const single = await page.evaluate(() =>
         [...document.querySelectorAll('.project-cover')].map((frame) => ({
           state: frame.getAttribute('data-image-motion'),
-          animations: frame.getAnimations({ subtree: true }).length,
+          animations: frame.querySelectorAll('[data-project-scene]').length,
         })),
       );
-      assert.equal(single.filter((frame) => frame.state === 'active').length, 1, 'only the hovered card may run');
+      assert.equal(single.filter((frame: { state: string | null }) => frame.state === 'active').length, 1, 'only the hovered card may run');
       assert.ok((single[1]?.animations ?? 0) > 0);
       await page.screenshot({ path: shot('gallery-htmx-reinsert') });
 
@@ -697,10 +711,10 @@ try {
   await check('no-JavaScript visitors keep the static image and no decoration', async () => {
     const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 }, javaScriptEnabled: false });
     const page = await context.newPage();
-    await page.route('**/api/projects', (route) =>
+    await page.route('**/api/projects', (route: BrowserRoute) =>
       route.fulfill({ status: 200, contentType: 'text/html', body: card(4, 'Pantheon', PANTHEON) }),
     );
-    await page.route('**/projects/4', (route) => route.fulfill({ status: 200, contentType: 'text/html', body: detailHtml }));
+    await page.route('**/projects/4', (route: BrowserRoute) => route.fulfill({ status: 200, contentType: 'text/html', body: detailHtml }));
     try {
       await page.goto('/projects/4', { waitUntil: 'domcontentloaded' });
       await page.waitForSelector('[data-project-preview]');
@@ -723,6 +737,147 @@ try {
       await page.waitForSelector('[data-project-loading]');
       assert.equal(await page.locator('[data-image-motion]').count(), 0);
       await page.screenshot({ path: shot('gallery-nojs') });
+    } finally {
+      await context.close();
+    }
+  });
+
+  for (const name of ['pantheon', 'bg-platform', 'interpreter']) {
+    for (const surface of ['card', 'detail'] as const) {
+      await check(`${name} ${surface} renders changing scene pixels without CSS animation`, async () => {
+        const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
+        const page = await openPage(context);
+        const base = `/public/projects/${name}-pixel`;
+        try {
+          if (surface === 'card') {
+            await galleryRoute(context, card(4, name, base));
+            await page.goto('/projects');
+            await page.waitForFunction(() => document.querySelector<HTMLImageElement>('[data-project-cover]')?.dataset.loaded === 'true');
+            await page.locator('.project-card').hover();
+          } else {
+            await context.route('**/projects/4', (route: BrowserRoute) =>
+              detailFixture(base, detailBody).then((body) => route.fulfill({ contentType: 'text/html', body })),
+            );
+            await page.goto('/projects/4');
+            await page.locator('[data-project-preview]').scrollIntoViewIfNeeded();
+          }
+          await waitForAttr(page, surface, 'active');
+          const scene = page.locator('[data-project-scene]');
+          const first = await scene.screenshot({ path: shot(`${name}-${surface}-frame-a`) });
+          await page.waitForTimeout(1400);
+          const second = await scene.screenshot({ path: shot(`${name}-${surface}-frame-b`) });
+          assert.ok(!first.equals(second), 'the actual scene image must have different decoded frames');
+          const state = await probe(page, surface);
+          assert.equal(state?.animations.length, 0);
+          assert.equal(state?.scene?.width, surface === 'card' ? 480 : 960);
+          return state;
+        } finally {
+          await context.close();
+        }
+      });
+    }
+  }
+
+  await check('failed animation retains decoded static artwork and does not retry on every hover', async () => {
+    const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
+    const page = await openPage(context);
+    const requests = motionRequests(page);
+    await galleryRoute(context, card(4, 'Pantheon', PANTHEON));
+    await page.route('**/*-motion-*.webp', (route: BrowserRoute) => route.fulfill({ contentType: 'image/webp', body: 'invalid WebP' }));
+    try {
+      await page.goto('/projects');
+      await page.waitForFunction(() => document.querySelector<HTMLImageElement>('[data-project-cover]')?.dataset.loaded === 'true');
+      await page.locator('.project-card').hover();
+      await page.waitForTimeout(600);
+      const state = assertIdle(await probe(page, 'card'), 'ready');
+      assert.ok(state.image.naturalWidth > 0);
+      assert.equal(state.image.visibility, 'visible');
+      await page.mouse.move(0, 0);
+      await page.locator('.project-card').hover();
+      await page.waitForTimeout(300);
+      assert.equal(requests.length, 1);
+      await page.screenshot({ path: shot('animation-failed-static') });
+    } finally {
+      await context.close();
+    }
+  });
+
+  await check('pending animation cannot appear after pointer leave or reduced-motion change', async () => {
+    const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
+    const page = await openPage(context);
+    await galleryRoute(context, card(4, 'Pantheon', PANTHEON));
+    const pending: (() => Promise<void>)[] = [];
+    await page.route(
+      '**/*-motion-*.webp',
+      (route: BrowserRoute) =>
+        new Promise<void>((resolve) => {
+          pending.push(async () => {
+            await route.continue().catch(() => {});
+            resolve();
+          });
+        }),
+    );
+    try {
+      await page.goto('/projects');
+      await page.waitForFunction(() => document.querySelector<HTMLImageElement>('[data-project-cover]')?.dataset.loaded === 'true');
+      await page.locator('.project-card').hover();
+      await waitForAttr(page, 'card', 'loading');
+      assert.equal((await probe(page, 'card'))?.image.visibility, 'visible');
+      await page.mouse.move(0, 0);
+      assertIdle(await probe(page, 'card'), 'ready');
+      await page.locator('.project-card').hover();
+      await waitForAttr(page, 'card', 'loading');
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await waitForAttr(page, 'card', null);
+      for (const release of pending) await release();
+      await page.waitForTimeout(400);
+      assertIdle(await probe(page, 'card'), null);
+      await page.emulateMedia({ reducedMotion: 'no-preference' });
+      await page.unroute('**/*-motion-*.webp');
+      for (const release of pending) await release();
+      await waitForAttr(page, 'card', 'active');
+    } finally {
+      for (const release of pending) await release();
+      await context.close();
+    }
+  });
+
+  await check('unknown images receive no animation enhancement', async () => {
+    const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
+    const page = await openPage(context);
+    const requests = motionRequests(page);
+    const html = card(4, 'Uploaded project', PANTHEON).replace(/ data-project-motion="[^"]*"/, '');
+    await galleryRoute(context, html);
+    try {
+      await page.goto('/projects');
+      await page.waitForFunction(() => document.querySelector<HTMLImageElement>('[data-project-cover]')?.dataset.loaded === 'true');
+      await page.locator('.project-card').hover();
+      await page.waitForTimeout(300);
+      assertIdle(await probe(page, 'card'), null);
+      assert.equal(requests.length, 0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  await check('far-offscreen cards defer both static and animated downloads', async () => {
+    const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
+    const page = await openPage(context);
+    const requests = motionRequests(page);
+    await galleryRoute(context, `<div style="grid-column:1/-1;height:2000px"></div>${card(4, 'Pantheon', PANTHEON)}`);
+    try {
+      await page.goto('/projects');
+      await page.waitForSelector('.project-card', { state: 'attached' });
+      await page.locator('.project-card-link').evaluate((element: HTMLElement) => element.focus({ preventScroll: true }));
+      await page.waitForTimeout(300);
+      assertIdle(await probe(page, 'card'), null);
+      assert.equal((await probe(page, 'card'))?.image.src, null);
+      assert.equal(requests.length, 0);
+      await page.locator('.project-cover').scrollIntoViewIfNeeded();
+      await waitForAttr(page, 'card', 'active');
+      await page.evaluate(() => scrollTo(0, 0));
+      await waitForAttr(page, 'card', 'ready');
+      assertIdle(await probe(page, 'card'), 'ready');
     } finally {
       await context.close();
     }

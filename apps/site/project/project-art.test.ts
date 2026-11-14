@@ -16,6 +16,7 @@ describe('project cover delivery', () => {
         height: 1086,
         avif: candidates('avif'),
         webp: candidates('webp'),
+        motion: { card: `${base}-motion-480.webp`, page: `${base}-motion-960.webp` },
       });
       for (const width of WIDTHS) {
         for (const extension of ['avif', 'webp']) {
@@ -29,6 +30,35 @@ describe('project cover delivery', () => {
       const fallback = await servePublicAsset(png);
       expect(fallback.status).toBe(200);
       expect(fallback.headers.get('Content-Type')).toBe('image/png');
+      for (const width of [480, 960]) {
+        const response = await servePublicAsset(`${base}-motion-${width}.webp`);
+        expect(response.status).toBe(200);
+        expect(response.headers.get('Content-Type')).toBe('image/webp');
+        const bytes = Buffer.from(await response.arrayBuffer());
+        expect(bytes.toString('ascii', 8, 12)).toBe('WEBP');
+        let frames = 0;
+        let duration = 0;
+        let loop: number | undefined;
+        for (let offset = 12; offset + 8 <= bytes.length; ) {
+          const kind = bytes.toString('ascii', offset, offset + 4);
+          const size = bytes.readUInt32LE(offset + 4);
+          const data = offset + 8;
+          if (kind === 'VP8X') {
+            expect(bytes.readUIntLE(data + 4, 3) + 1).toBe(width);
+            expect(bytes.readUIntLE(data + 7, 3) + 1).toBe((width * 3) / 4);
+          }
+          if (kind === 'ANIM') loop = bytes.readUInt16LE(data + 4);
+          if (kind === 'ANMF') {
+            frames++;
+            duration += bytes.readUIntLE(data + 12, 3);
+          }
+          offset = data + size + (size % 2);
+        }
+        expect(loop).toBe(0);
+        expect(frames).toBeGreaterThanOrEqual(name === 'pantheon' ? 90 : 191);
+        expect(duration).toBe(name === 'pantheon' ? 5999 : 7999);
+        expect(bytes.length).toBeLessThan(width === 480 ? 1_000_000 : 3_000_000);
+      }
     }
   });
 

@@ -13,6 +13,7 @@ export type ProjectArt = {
   height: number;
   avif?: string;
   webp?: string;
+  motion?: { card: string; page: string };
 };
 
 function srcset(base: string, format: 'avif' | 'webp') {
@@ -30,5 +31,6 @@ export function projectArt(value: string | null): ProjectArt | null {
     height: 1086,
     avif: srcset(base, 'avif'),
     webp: srcset(base, 'webp'),
+    motion: { card: `${base}-motion-480.webp`, page: `${base}-motion-960.webp` },
   };
 }
