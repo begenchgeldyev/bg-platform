@@ -191,11 +191,23 @@ try {
   await Bun.write(`${output}/detail-fixture.html`, detailHtml);
   await Bun.write(`${output}/detail-failed-fixture.html`, failedDetailHtml);
 
-  await check('gallery hover starts authored motion only after the existing decode contract', async () => {
+  await check('visible desktop cards autoplay only after the existing decode contract', async () => {
     const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
     const page = await openPage(context);
     const requests = motionRequests(page);
     await galleryRoute(context, card(4, 'Pantheon', PANTHEON));
+    // Hold only completion of the real static decode, never the motion implementation.
+    await page.addInitScript(() => {
+      const decode = HTMLImageElement.prototype.decode;
+      HTMLImageElement.prototype.decode = async function () {
+        await decode.call(this);
+        if (this.hasAttribute('data-project-cover')) {
+          await new Promise<void>((resolve) => {
+            (window as Window & { releaseStaticDecode?: () => void }).releaseStaticDecode = resolve;
+          });
+        }
+      };
+    });
     try {
       await page.goto('/projects', { waitUntil: 'domcontentloaded' });
       await page.waitForSelector('.project-card');
@@ -204,20 +216,19 @@ try {
         1,
         'the shared motion enhancement must be included outside the swapped gallery content',
       );
-      await page.waitForFunction(() => document.querySelector<HTMLImageElement>('[data-project-cover]')?.dataset.loaded === 'true');
-      const idle = assertIdle(await probe(page, 'card'), 'ready');
-      assert.equal(requests.length, 0, 'idle cards must not download animations');
-      await page.screenshot({ path: shot('gallery-idle-1440') });
+      await page.waitForFunction(() => Boolean((window as Window & { releaseStaticDecode?: () => void }).releaseStaticDecode));
+      const idle = assertIdle(await probe(page, 'card'), null);
+      assert.equal(requests.length, 0, 'cards must not download animations before static decoding finishes');
       assert.ok(idle.image.currentSrc.endsWith('.avif'), 'the responsive AVIF source must remain in use');
-      await page.locator('.project-card').first().hover();
+      await page.evaluate(() => (window as Window & { releaseStaticDecode?: () => void }).releaseStaticDecode?.());
       await waitForAttr(page, 'card', 'active');
       const active = await probe(page, 'card');
       assert.ok(active, 'card probe');
       assert.equal(active.attr, 'active');
       assert.equal(active.mode, 'card');
-      assert.equal(active.running, true, 'hover must run the authored animation');
+      assert.equal(active.running, true, 'a visible card must run without hover or focus');
       assert.equal(active.afterAnimation, 'none', 'the synthetic sweep must be gone');
-      assert.ok(active.scene?.src?.endsWith('-motion-480.webp'), 'hover must display the actual animated scene');
+      assert.ok(active.scene?.src?.endsWith('-motion-480.webp'), 'autoplay must display the actual animated scene');
       assert.equal(active.overlayNodes, 0, 'motion must not add decorative layers');
       assert.deepEqual(active.rect, idle.rect, 'activation must not move the cover');
       assert.equal(active.image.src, idle.image.src);
@@ -231,17 +242,19 @@ try {
       const later = await probe(page, 'card');
       assert.ok(later, 'card probe');
       assert.equal(later.animations.length, 0, 'scene movement must not come from CSS animations');
-      await page.screenshot({ path: shot('gallery-hover-1440') });
+      await page.screenshot({ path: shot('gallery-autoplay-1440') });
+      await page.locator('.project-card').first().hover();
       await page.mouse.move(4, 4);
-      await waitForAttr(page, 'card', 'ready');
-      const stopped = assertIdle(await probe(page, 'card'), 'ready');
-      await Bun.write(`${output}/gallery-hover-frames.json`, JSON.stringify({ idle, active, later, stopped }, null, 2));
+      await page.waitForTimeout(180);
+      assert.equal((await probe(page, 'card'))?.running, true, 'leaving hover must not stop a visible card');
+      assert.equal(requests.length, 1, 'pointer interaction must not restart the scene');
+      await Bun.write(`${output}/gallery-autoplay-frames.json`, JSON.stringify({ idle, active, later }, null, 2));
     } finally {
       await context.close();
     }
   });
 
-  await check('keyboard focus runs motion and leaving focus stops it', async () => {
+  await check('keyboard focus remains visible and leaving focus does not stop autoplay', async () => {
     const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
     const page = await openPage(context);
     await galleryRoute(context, card(4, 'Pantheon', PANTHEON));
@@ -265,14 +278,14 @@ try {
         .locator('.project-card-link')
         .first()
         .evaluate((element: HTMLElement) => element.blur());
-      await waitForAttr(page, 'card', 'ready');
-      assertIdle(await probe(page, 'card'), 'ready');
+      await page.waitForTimeout(180);
+      assert.equal((await probe(page, 'card'))?.running, true, 'leaving focus must not stop a visible card');
     } finally {
       await context.close();
     }
   });
 
-  await check('a still-focused or still-hovered card resumes motion after a document visibility round-trip', async () => {
+  await check('an untouched card resumes autoplay after a document visibility round-trip', async () => {
     const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
     const page = await openPage(context);
     await galleryRoute(context, card(4, 'Pantheon', PANTHEON));
@@ -298,13 +311,10 @@ try {
           document.dispatchEvent(new Event('visibilitychange'));
         });
 
-      await page.locator('.project-card-link').first().focus();
       await waitForAttr(page, 'card', 'active');
-      assert.equal(await page.evaluate(() => document.activeElement?.className), 'project-card-link', 'the link must hold focus');
       await hide();
       await waitForAttr(page, 'card', null);
-      assert.equal((await probe(page, 'card'))?.running, false, 'a hidden document must stop the sweep');
-      assert.equal(await page.evaluate(() => document.activeElement?.className), 'project-card-link', 'focus must survive the round-trip');
+      assertIdle(await probe(page, 'card'), null);
       await show();
       await page.waitForFunction(
         () => document.querySelector('.project-cover')?.getAttribute('data-image-motion') === 'active',
@@ -313,43 +323,15 @@ try {
       );
       assert.equal(
         (await page.evaluate(() => (window as Window & { interactionEvents?: { focusin: number } }).interactionEvents?.focusin)) ?? 0,
-        1,
-        'resumed focus motion must not depend on a fresh focusin event',
-      );
-      assert.equal(await page.evaluate(() => document.activeElement?.className), 'project-card-link', 'focus must remain on the link');
-
-      // The same round-trip with the pointer resting on the card and no new pointerenter.
-      await page
-        .locator('.project-card-link')
-        .first()
-        .evaluate((element: HTMLElement) => element.blur());
-      await waitForAttr(page, 'card', 'ready');
-      await page.locator('.project-card').first().hover();
-      await waitForAttr(page, 'card', 'active');
-      const pointerEnters = await page.evaluate(
-        () => (window as Window & { interactionEvents?: { pointerenter: number } }).interactionEvents?.pointerenter ?? 0,
-      );
-      await hide();
-      await waitForAttr(page, 'card', null);
-      await show();
-      await page.waitForFunction(
-        () => document.querySelector('.project-cover')?.getAttribute('data-image-motion') === 'active',
-        undefined,
-        { timeout: 2500 },
+        0,
+        'resumed autoplay must not depend on a focusin event',
       );
       assert.equal(
         await page.evaluate(
           () => (window as Window & { interactionEvents?: { pointerenter: number } }).interactionEvents?.pointerenter ?? 0,
         ),
-        pointerEnters,
-        'resumed hover motion must not depend on a fresh pointerenter event',
-      );
-      assert.equal(
-        await page
-          .locator('.project-card')
-          .first()
-          .evaluate((element: Element) => element.matches(':hover')),
-        true,
+        0,
+        'resumed autoplay must not depend on a pointerenter event',
       );
     } finally {
       await context.close();
@@ -402,6 +384,10 @@ try {
         .evaluate((element: HTMLElement) => element.focus({ preventScroll: true }));
       assert.equal(await page.evaluate(() => window.scrollY), belowMinimumScroll, 'focus must not move the cover into view');
       assert.equal((await probe(page, 'card'))?.attr, 'ready', 'focus alone cannot activate a cover below the 1% minimum');
+      await page
+        .locator('.project-card-link')
+        .first()
+        .evaluate((element: HTMLElement) => element.blur());
 
       // Scroll to a ratio between the card minimum (1%) and the page threshold (35%).
       const betweenScroll = belowMinimumScroll + Math.round(geometry.height * 0.1);
@@ -454,22 +440,18 @@ try {
       await page.goto('/projects', { waitUntil: 'domcontentloaded' });
       await page.waitForSelector('.project-card');
       await page.waitForFunction(() => document.querySelector<HTMLImageElement>('[data-project-cover]')?.dataset.loaded === 'true');
-      await page.locator('.project-card').first().hover();
       await waitForAttr(page, 'card', 'active');
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await waitForAttr(page, 'card', null);
       assertIdle(await probe(page, 'card'), null);
       await page.emulateMedia({ reducedMotion: 'no-preference' });
-      await page.waitForFunction(() => {
-        const state = document.querySelector('[data-project-cover]')?.closest('.project-cover')?.getAttribute('data-image-motion');
-        return state === 'ready' || state === 'active';
-      });
+      await waitForAttr(page, 'card', 'active');
     } finally {
       await live.close();
     }
   });
 
-  await check('touch-only cards stay static and keep navigating', async () => {
+  await check('touch-only cards autoplay and keep navigating', async () => {
     const context = await browser.newContext({ baseURL, viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
     const page = await openPage(context);
     const requests = motionRequests(page);
@@ -484,14 +466,15 @@ try {
       assert.equal(media.coarse, true);
       assert.equal(media.hover, false);
       await page.waitForFunction(() => document.querySelector<HTMLImageElement>('[data-project-cover]')?.dataset.loaded === 'true');
-      assertIdle(await probe(page, 'card'), 'ready');
-      await page.screenshot({ path: shot('gallery-narrow-idle-390') });
-      await page.locator('.project-card').first().hover();
-      await page.waitForTimeout(260);
-      assertIdle(await probe(page, 'card'), 'ready');
+      await waitForAttr(page, 'card', 'active');
+      assert.equal((await probe(page, 'card'))?.running, true, 'touch cards must autoplay without interaction');
+      const firstFrame = await page.locator('.project-cover').first().screenshot();
+      await page.waitForTimeout(520);
+      const secondFrame = await page.locator('.project-cover').first().screenshot();
+      assert.ok(!firstFrame.equals(secondFrame), 'touch autoplay must render changing scene pixels');
       await page.screenshot({ path: shot('gallery-narrow-coarse-390') });
-      assert.equal(requests.length, 0, 'touch cards must not request animated WebP');
-      await page.locator('.project-card-link').first().click();
+      assert.equal(requests.length, 1, 'touch cards must request their animated WebP');
+      await page.locator('.project-card-link').first().tap();
       await page.waitForURL('**/projects/4');
       assert.ok(page.url().includes('/projects/4'), 'the card must remain a working link');
     } finally {
@@ -625,7 +608,6 @@ try {
       await page.goto('/projects', { waitUntil: 'domcontentloaded' });
       await page.waitForSelector('.project-card');
       await page.waitForFunction(() => document.querySelector<HTMLImageElement>('[data-project-cover]')?.dataset.loaded === 'true');
-      await page.locator('.project-card-link').first().focus();
       await waitForAttr(page, 'card', 'active');
       await page.evaluate(() => {
         (window as Window & { oldFrame?: Element }).oldFrame = document.querySelector('.project-cover') ?? undefined;
@@ -656,10 +638,9 @@ try {
       assert.equal(cleaned.oldSceneConnected, false);
       assert.equal(cleaned.scriptTags, 1, 'the shared script must not be duplicated');
       assert.equal(cleaned.frames, 2);
-      await page.locator('.project-card').nth(1).hover();
       await page.waitForFunction(() => {
         const frames = [...document.querySelectorAll('.project-cover')];
-        return frames[1]?.getAttribute('data-image-motion') === 'active' && frames[0]?.getAttribute('data-image-motion') !== 'active';
+        return frames.length === 2 && frames.every((frame) => frame.getAttribute('data-image-motion') === 'active');
       });
       const single = await page.evaluate(() =>
         [...document.querySelectorAll('.project-cover')].map((frame) => ({
@@ -667,8 +648,15 @@ try {
           animations: frame.querySelectorAll('[data-project-scene]').length,
         })),
       );
-      assert.equal(single.filter((frame: { state: string | null }) => frame.state === 'active').length, 1, 'only the hovered card may run');
-      assert.ok((single[1]?.animations ?? 0) > 0);
+      assert.equal(
+        single.filter((frame: { state: string | null }) => frame.state === 'active').length,
+        2,
+        'all visible cards must autoplay',
+      );
+      assert.ok(
+        single.every((frame: { animations: number }) => frame.animations === 1),
+        'each frame must have exactly one scene',
+      );
       await page.screenshot({ path: shot('gallery-htmx-reinsert') });
 
       await page.evaluate(
@@ -685,7 +673,6 @@ try {
       );
       await page.locator('[data-fixture="later"] .project-cover').scrollIntoViewIfNeeded();
       await page.waitForFunction(() => document.querySelector<HTMLImageElement>('[data-fixture="later"] img')?.dataset.loaded === 'true');
-      await page.locator('[data-fixture="later"]').hover();
       await page.waitForFunction(
         () => document.querySelector('[data-fixture="later"] .project-cover')?.getAttribute('data-image-motion') === 'active',
       );
@@ -739,7 +726,6 @@ try {
             await galleryRoute(context, card(4, name, base));
             await page.goto('/projects');
             await page.waitForFunction(() => document.querySelector<HTMLImageElement>('[data-project-cover]')?.dataset.loaded === 'true');
-            await page.locator('.project-card').hover();
           } else {
             await context.route('**/projects/4', (route: BrowserRoute) =>
               detailFixture(base, detailBody).then((body) => route.fulfill({ contentType: 'text/html', body })),
@@ -764,7 +750,7 @@ try {
     }
   }
 
-  await check('failed animation retains decoded static artwork and does not retry on every hover', async () => {
+  await check('failed animation retains decoded static artwork and does not retry on reactivation', async () => {
     const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
     const page = await openPage(context);
     const requests = motionRequests(page);
@@ -773,13 +759,17 @@ try {
     try {
       await page.goto('/projects');
       await page.waitForFunction(() => document.querySelector<HTMLImageElement>('[data-project-cover]')?.dataset.loaded === 'true');
-      await page.locator('.project-card').hover();
       await page.waitForTimeout(600);
       const state = assertIdle(await probe(page, 'card'), 'ready');
       assert.ok(state.image.naturalWidth > 0);
       assert.equal(state.image.visibility, 'visible');
+      assert.equal(requests.length, 1, 'autoplay must attempt the scene before any interaction');
       await page.mouse.move(0, 0);
       await page.locator('.project-card').hover();
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await waitForAttr(page, 'card', null);
+      await page.emulateMedia({ reducedMotion: 'no-preference' });
+      await waitForAttr(page, 'card', 'ready');
       await page.waitForTimeout(300);
       assert.equal(requests.length, 1);
       await page.screenshot({ path: shot('animation-failed-static') });
@@ -788,7 +778,7 @@ try {
     }
   });
 
-  await check('pending animation cannot appear after pointer leave or reduced-motion change', async () => {
+  await check('pending animation cannot appear after scrolling offscreen or reduced-motion change', async () => {
     const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
     const page = await openPage(context);
     await galleryRoute(context, card(4, 'Pantheon', PANTHEON));
@@ -806,12 +796,18 @@ try {
     try {
       await page.goto('/projects');
       await page.waitForFunction(() => document.querySelector<HTMLImageElement>('[data-project-cover]')?.dataset.loaded === 'true');
-      await page.locator('.project-card').hover();
       await waitForAttr(page, 'card', 'loading');
       assert.equal((await probe(page, 'card'))?.image.visibility, 'visible');
-      await page.mouse.move(0, 0);
+      await page.evaluate(() => {
+        const spacer = document.createElement('div');
+        spacer.style.height = '2000px';
+        document.getElementById('project-gallery')?.before(spacer);
+      });
+      await waitForAttr(page, 'card', 'ready');
+      for (const release of pending) await release();
+      await page.waitForTimeout(400);
       assertIdle(await probe(page, 'card'), 'ready');
-      await page.locator('.project-card').hover();
+      await page.locator('.project-cover').scrollIntoViewIfNeeded();
       await waitForAttr(page, 'card', 'loading');
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await waitForAttr(page, 'card', null);
@@ -854,7 +850,6 @@ try {
     try {
       await page.goto('/projects');
       await page.waitForSelector('.project-card', { state: 'attached' });
-      await page.locator('.project-card-link').evaluate((element: HTMLElement) => element.focus({ preventScroll: true }));
       await page.waitForTimeout(300);
       assertIdle(await probe(page, 'card'), null);
       assert.equal((await probe(page, 'card'))?.image.src, null);

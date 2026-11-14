@@ -1,7 +1,7 @@
 /* Actual scene playback, progressively enhanced over the untouched static picture.
  * Animated WebP has no pause API: stopping removes its source AND its node. A new
  * activation uses a fresh image, while the browser may reuse the encoded cache.
- * No animation URL is requested before decoded static art and eligible interaction.
+ * No animation URL is requested before decoded static art and eligible visibility.
  */
 (() => {
   const BOOT = '__bgProjectsMotionBooted';
@@ -9,7 +9,6 @@
   window[BOOT] = true;
 
   const reduceQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-  const hoverQuery = window.matchMedia('(hover: hover) and (pointer: fine)');
   const states = new Set();
   const stateByFrame = new WeakMap();
   const style = document.createElement('style');
@@ -71,12 +70,7 @@
   }
 
   function wanted(state) {
-    return (
-      eligible(state) &&
-      state.visible &&
-      !state.failed &&
-      (state.mode === 'page' || (hoverQuery.matches && (state.hovered || state.focused)))
-    );
+    return eligible(state) && state.visible && !state.failed;
   }
 
   function start(state) {
@@ -147,12 +141,10 @@
     if (!frame || stateByFrame.has(frame) || !image.dataset.projectMotion) return;
     const controller = new AbortController();
     const { signal } = controller;
-    const card = mode === 'card' ? (image.closest('.project-card') ?? frame) : null;
     const state = {
       frame,
       image,
       mode,
-      card,
       controller,
       url: image.dataset.projectMotion,
       scene: null,
@@ -160,8 +152,6 @@
       decoded: false,
       decodeVersion: 0,
       visible: false,
-      hovered: card?.matches(':hover') ?? false,
-      focused: card?.contains(document.activeElement) ?? false,
       failed: false,
       disposed: false,
     };
@@ -179,41 +169,6 @@
       },
       { signal },
     );
-    if (card) {
-      card.addEventListener(
-        'pointerenter',
-        () => {
-          state.hovered = true;
-          apply(state);
-        },
-        { signal },
-      );
-      card.addEventListener(
-        'pointerleave',
-        () => {
-          state.hovered = false;
-          apply(state);
-        },
-        { signal },
-      );
-      card.addEventListener(
-        'focusin',
-        () => {
-          state.focused = true;
-          apply(state);
-        },
-        { signal },
-      );
-      card.addEventListener(
-        'focusout',
-        (event) => {
-          if (event.relatedTarget instanceof Node && card.contains(event.relatedTarget)) return;
-          state.focused = false;
-          apply(state);
-        },
-        { signal },
-      );
-    }
     if (image.complete && image.naturalWidth > 0) {
       if (mode === 'card') syncLoaded(state);
       else decodePage(state);
@@ -259,17 +214,10 @@
   }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-loaded', 'hidden'] });
 
   document.addEventListener('visibilitychange', () => {
-    for (const state of states) {
-      if (state.card) {
-        state.hovered = state.card.matches(':hover');
-        state.focused = state.card.contains(document.activeElement);
-      }
-      apply(state);
-    }
+    for (const state of states) apply(state);
   });
-  for (const query of [reduceQuery, hoverQuery])
-    query.addEventListener('change', () => {
-      for (const state of states) apply(state);
-    });
+  reduceQuery.addEventListener('change', () => {
+    for (const state of states) apply(state);
+  });
   scan(document);
 })();

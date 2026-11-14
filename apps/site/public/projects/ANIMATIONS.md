@@ -41,11 +41,11 @@ budgets (1 MB/card, 3 MB/page).
 ## Playback
 
 Animation URLs are inert data attributes until the static image is decoded and
-the existing interaction is eligible: hover/focus on fine-pointer cards, visible
-project pages. Reduced motion disables both; touch cards stay static. Static
+visible: cards autoplay on desktop and touch at 1% visibility, project pages at
+35% visibility. No hover or focus is required. Reduced motion disables both. Static
 sources and layout are never changed. A decorative, absolute image displays only
-after successful decoding; there are no sweep/corner effects. Leaving the card,
-scrolling offscreen, hiding the document, enabling reduced motion or replacing
+after successful decoding; there are no sweep/corner effects. Scrolling offscreen,
+hiding the document, enabling reduced motion or replacing
 the image removes the animated source and node, not merely its visibility.
 Reactivation creates a fresh image (encoded bytes may come from browser cache).
 Errors retain static art without repeated retries until a fresh frame is mounted.

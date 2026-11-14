@@ -95,7 +95,7 @@
 }
 a:focus-visible,
 button:focus-visible {
-  outline: 2px solid #00ff41;
+  outline: 2px solid var(--accent);
   outline-offset: 4px;
 }
 #terminal-body {
@@ -115,7 +115,7 @@ button:focus-visible {
   display: inline-block;
   width: 10px;
   height: 1.2em;
-  background-color: #00ff41;
+  background-color: var(--accent);
   margin-left: 2px;
   animation: blink 1s step-end infinite;
   vertical-align: middle;
@@ -140,7 +140,7 @@ button:focus-visible {
 .terminal-pixels > span {
   width: 4px;
   height: 4px;
-  background-color: #00ff41;
+  background-color: var(--accent);
   opacity: 0.35;
   animation: terminal-pixel 900ms linear infinite;
 }
@@ -163,6 +163,10 @@ button:focus-visible {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .blinking-cursor {
+    animation: none;
+    opacity: 1;
+  }
   .terminal-pixels > span {
     animation: none;
     opacity: 0.65;
@@ -177,7 +181,7 @@ body {
   appearance: none;
   font-size: inherit;
   line-height: inherit;
-  caret-color: #00ff41;
+  caret-color: var(--accent);
   font-family:
     "OpenTUI Mono", "Noto Sans Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
 }
@@ -196,15 +200,15 @@ body {
   background: #0a0a0a;
 }
 ::-webkit-scrollbar-thumb {
-  background: #00802a;
+  background: rgb(var(--accent-rgb) / 0.5);
   border-radius: 0;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #00ff41;
+  background: var(--accent);
 }
 * {
   scrollbar-width: thin;
-  scrollbar-color: #1a2e1a #0a0a0a;
+  scrollbar-color: rgb(var(--accent-rgb) / 0.3) #0a0a0a;
 }
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;
@@ -216,7 +220,7 @@ body {
   background: #353534;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #00ff41;
+  background: var(--accent);
 }
 .htmx-request .loading-indicator {
   display: flex !important;
