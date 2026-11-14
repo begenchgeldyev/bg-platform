@@ -34,6 +34,14 @@
   let currentTurn = null;
   const nearBottom = () => body.scrollHeight - body.clientHeight - body.scrollTop <= 32;
 
+  // Typing starts at the prompt. The pointer gate keeps a phone from opening its
+  // keyboard on load, and preventScroll leaves the hero and page offset untouched.
+  const finePointer = window.matchMedia('(pointer: fine)');
+  function focusPrompt() {
+    if (!finePointer.matches || input.readOnly) return;
+    input.focus({ preventScroll: true });
+  }
+
   // Only the composer owns focus. Reading/selecting transcript text must not scroll or refocus it.
   inputLine.addEventListener('click', () => {
     if (!window.getSelection()?.toString()) input.focus({ preventScroll: true });
@@ -116,6 +124,9 @@
       // Reveal the beginning of a long answer, not its end. Never scroll the page.
       const lineTop = line.getBoundingClientRect().top - body.getBoundingClientRect().top + previousTop;
       body.scrollTop = follow ? Math.min(lineTop, Math.max(previousTop, body.scrollHeight - body.clientHeight)) : previousTop;
+      // Hand the prompt back only when nothing else claimed focus or a selection.
+      const active = document.activeElement;
+      if ((active === input || active === document.body) && !window.getSelection()?.toString()) focusPrompt();
     }
 
     try {
@@ -368,5 +379,10 @@
       COMMANDS.clear();
     }
   });
+
+  // A speculative prerender runs this script while the page is still inactive, where
+  // focus is not applied; take the prompt on activation instead.
+  if (document.prerendering) document.addEventListener('prerenderingchange', focusPrompt, { once: true });
+  focusPrompt();
 })();
 </script>
