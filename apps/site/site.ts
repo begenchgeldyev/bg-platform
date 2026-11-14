@@ -297,7 +297,7 @@ async function renderHeader(config: LayoutConfig, lang: Lang) {
 
 async function renderFooter(config: LayoutConfig, lang: Lang) {
   if (config.footerVariant === 'home') {
-    return renderComponentTemplate('footer-home.html', { footerResumeLink: t(lang, 'footerResumeLink') });
+    return renderComponentTemplate('footer-home.html');
   }
 
   const resumeLink = config.includeResumeLink

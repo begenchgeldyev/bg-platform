@@ -74,11 +74,46 @@ describe('canonical resume', () => {
       else process.env.NODE_ENV = previous;
     }
   });
+});
 
-  test.each(['en', 'ru'] as const)('home download uses the translated canonical asset (%s)', async (lang) => {
-    const html = await ((await renderPage('/', lang)) as Response).text();
-    expect(html).toContain(`href="${RESUME_PDF}"`);
-    expect(html).toContain(lang === 'en' ? 'Download resume' : 'Скачать резюме');
+describe('home footer contacts', () => {
+  test.each(['en', 'ru'] as const)('offers a clickable email and two social profiles without a duplicate download (%s)', async (lang) => {
+    const response = await renderPage('/', lang);
+    expect(response?.status).toBe(200);
+    const links: { href: string | null; text: string; target: string | null; rel: string | null }[] = [];
+    let footerCount = 0;
+    let footerText = '';
+    await new HTMLRewriter()
+      .on('footer', {
+        element() {
+          footerCount++;
+        },
+        text(chunk) {
+          footerText += chunk.text;
+        },
+      })
+      .on('footer a', {
+        element(element) {
+          links.push({
+            href: element.getAttribute('href'),
+            text: '',
+            target: element.getAttribute('target'),
+            rel: element.getAttribute('rel'),
+          });
+        },
+        text(chunk) {
+          links[links.length - 1].text += chunk.text;
+        },
+      })
+      .transform(response as Response)
+      .text();
+    expect(footerCount).toBe(1);
+    expect(links.map((link) => ({ ...link, text: link.text.trim() }))).toEqual([
+      { href: 'mailto:begenchgeldyev@gmail.com', text: 'begenchgeldyev@gmail.com', target: null, rel: null },
+      { href: 'https://github.com/begenchgeldyev', text: 'GitHub', target: '_blank', rel: 'noopener noreferrer' },
+      { href: 'https://linkedin.com/in/begench-geldyev', text: 'LinkedIn', target: '_blank', rel: 'noopener noreferrer' },
+    ]);
+    expect(footerText).not.toMatch(/©|copyright|resume|резюме|\.pdf/i);
   });
 });
 
