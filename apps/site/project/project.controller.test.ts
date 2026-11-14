@@ -1,8 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import type { ProjectInput, ProjectsRepository } from '@bg/core';
+import type { Project, ProjectAccess, ProjectInput } from '@bg/core';
 import { ProjectController } from './project.controller';
-
-type Project = Awaited<ReturnType<ProjectsRepository['list']>>[number];
+import { PROJECT_LIMITS } from './project-input';
 
 function project(overrides: Partial<Project> = {}): Project {
   return {
@@ -50,7 +49,8 @@ class FakeProjectsRepository {
     this.updates.push({ id, changes });
     const existing = this.projects.find((item) => item.id === id);
     if (!existing) return null;
-    return { ...existing, ...changes, updatedAt: new Date('2026-02-01T00:00:00Z') };
+    Object.assign(existing, changes, { updatedAt: new Date('2026-02-01T00:00:00Z') });
+    return existing;
   }
 
   async deleteById(id: number): Promise<boolean> {
@@ -62,14 +62,14 @@ class FakeProjectsRepository {
   }
 }
 
-function controller(options: { projects?: Project[]; canEdit?: boolean } = {}) {
+function controller(options: { projects?: Project[]; canEdit?: boolean; access?: ProjectAccess } = {}) {
   const repository = new FakeProjectsRepository(options.projects ?? []);
   const canEditCalls: Request[] = [];
   const canEdit = async (req: Request) => {
     canEditCalls.push(req);
-    return options.canEdit ?? false;
+    return options.access ?? (options.canEdit ? 'editor' : 'visitor');
   };
-  const subject = new ProjectController(repository as unknown as ProjectsRepository, canEdit);
+  const subject = new ProjectController(repository, canEdit);
 
   return { canEditCalls, controller: subject, repository };
 }
@@ -127,6 +127,54 @@ describe('ProjectController.get', () => {
 });
 
 describe('ProjectController.getPageById', () => {
+  test.each([
+    'visitor',
+    'read-only',
+    'editor',
+  ] as const)('keeps %s project documents session-safe, localized and HEAD-correct', async (access) => {
+    const subject = controller({ projects: [project({ content: '<p><strong>Trusted body</strong></p>' })], access });
+    const headers = { cookie: 'lang=ru', 'if-none-match': '*' };
+    const response = await subject.controller.getPageById(new Request('http://localhost/projects/1', { headers }), 1);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('etag')).toBeNull();
+    const html = await response.text();
+    expect(html).toContain('<html class="dark" lang="ru">');
+    expect(html).toContain('<p><strong>Trusted body</strong></p>');
+    expect(html.includes('id="project-upload-trigger"')).toBe(access === 'editor');
+    const head = await subject.controller.getPageById(new Request('http://localhost/projects/1', { method: 'HEAD', headers }), 1);
+    expect(head.status).toBe(200);
+    expect(head.headers.get('cache-control')).toBe('no-store');
+    expect(head.headers.get('content-length')).toBe(String(Buffer.byteLength(html)));
+    expect(await head.text()).toBe('');
+  });
+
+  test.each([
+    'visitor',
+    'read-only',
+    'editor',
+  ] as const)('hidden project responses for %s cannot be stored and respect HEAD', async (access) => {
+    const subject = controller({ projects: projectsWithHidden(), access });
+    const get = await subject.controller.getPageById(new Request('http://localhost/projects/2'), 2);
+    expect(get.status).toBe(access === 'editor' ? 200 : 404);
+    expect(get.headers.get('cache-control')).toBe('no-store');
+    const html = await get.text();
+    expect(html.includes(HIDDEN)).toBe(access === 'editor');
+    const head = await subject.controller.getPageById(new Request('http://localhost/projects/2', { method: 'HEAD' }), 2);
+    expect(head.status).toBe(get.status);
+    expect(head.headers.get('cache-control')).toBe('no-store');
+    expect(head.headers.get('content-type')).toBe(get.headers.get('content-type'));
+    expect(head.headers.get('content-length')).toBe(String(Buffer.byteLength(html)));
+    expect(await head.text()).toBe('');
+  });
+
+  test('escapes raw ampersands and hostile titles exactly once through the controller', async () => {
+    const subject = controller({ projects: [project({ name: 'A & B </title><script>evil()</script>' })] });
+    const html = await (await subject.controller.getPageById(new Request('http://localhost/projects/1'), 1)).text();
+    expect(html).toContain('<title>A &amp; B &lt;/TITLE&gt;&lt;SCRIPT&gt;EVIL()&lt;/SCRIPT&gt; — BEGENCH_GELDYEV@ROOT:~$</title>');
+    expect(html).not.toContain('A &amp;amp; B');
+  });
+
   test("a hidden project's page is 404 for visitors and 200 for the owner", async () => {
     const visitor = controller({ projects: projectsWithHidden(), canEdit: false });
     const notFound = await visitor.controller.getPageById(new Request('http://localhost/projects/2'), 2);
@@ -141,6 +189,12 @@ describe('ProjectController.getPageById', () => {
     const owner = controller({ projects: projectsWithHidden(), canEdit: true });
     const response = await owner.controller.getPageById(new Request('http://localhost/projects/99'), 99);
     expect(response.status).toBe(404);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    const head = await owner.controller.getPageById(new Request('http://localhost/projects/99', { method: 'HEAD' }), 99);
+    expect(head.status).toBe(404);
+    expect(head.headers.get('content-type')).toBe(response.headers.get('content-type'));
+    expect(head.headers.get('content-length')).toBe(String(Buffer.byteLength(await response.text())));
+    expect(await head.text()).toBe('');
   });
 
   test('escapes the project name in the page title', async () => {
@@ -175,6 +229,49 @@ describe('ProjectController.getPageById', () => {
 });
 
 describe('ProjectController writes', () => {
+  test('read-only sessions cannot write or see hidden projects', async () => {
+    const { controller: subject, canEditCalls } = controller({ projects: projectsWithHidden(), access: 'read-only' });
+    expect((await subject.post(jsonWrite({ name: 'Demo' }))).status).toBe(403);
+    expect((await subject.patch(jsonWrite({ name: 'Demo' }, { method: 'PATCH', id: 1 }), 1)).status).toBe(403);
+    expect((await subject.delete(deleteRequest(), 1)).status).toBe(403);
+    expect((await subject.getPageById(new Request('http://localhost/projects/2'), 2)).status).toBe(404);
+    expect(await (await subject.get(new Request('http://localhost/api/projects'))).json()).toMatchObject({
+      projects: [{ name: 'Visible Project' }],
+    });
+    expect(canEditCalls).toHaveLength(5);
+  });
+
+  test('POST and PATCH check rights before media type and do not consume unauthorized bodies', async () => {
+    for (const method of ['POST', 'PATCH'] as const) {
+      const { controller: subject, repository, canEditCalls } = controller();
+      const req = new Request('http://localhost/api/projects/1', { method, headers: { 'Content-Type': 'text/plain' }, body: '{broken' });
+      const response = method === 'POST' ? await subject.post(req) : await subject.patch(req, 1);
+      expect(response.status).toBe(403);
+      expect(req.bodyUsed).toBe(false);
+      expect(canEditCalls).toEqual([req]);
+      expect(repository.calls).toEqual([]);
+    }
+  });
+
+  test('POST and PATCH check JSON media type before reading, then reject malformed and oversized bodies', async () => {
+    for (const method of ['POST', 'PATCH'] as const) {
+      for (const [contentType, body, expectedStatus, error] of [
+        ['text/plain', '{broken', 415, 'requests must be JSON'],
+        ['application/json', '{broken', 400, 'request body must be JSON'],
+        ['application/json', ' '.repeat(PROJECT_LIMITS.maxBodyBytes + 1), 400, 'request is too large'],
+      ] as const) {
+        const { controller: subject, repository, canEditCalls } = controller({ canEdit: true });
+        const req = new Request('http://localhost/api/projects/1', { method, headers: { 'Content-Type': contentType }, body });
+        const response = method === 'POST' ? await subject.post(req) : await subject.patch(req, 1);
+        expect(response.status).toBe(expectedStatus);
+        expect(await response.json()).toEqual({ error });
+        if (expectedStatus === 415) expect(req.bodyUsed).toBe(false);
+        expect(canEditCalls).toEqual([req]);
+        expect(repository.calls).toEqual([]);
+      }
+    }
+  });
+
   test('refuses writes from visitors', async () => {
     const { controller: subject, repository } = controller({ projects: [project()], canEdit: false });
 
@@ -195,9 +292,11 @@ describe('ProjectController writes', () => {
     const { canEditCalls, controller: subject, repository } = controller({ canEdit: true });
 
     const posted = await subject.post(jsonWrite({ name: 'Demo' }, { headers: crossSite }));
+    const patched = await subject.patch(jsonWrite({ name: 'Demo' }, { method: 'PATCH', id: 1, headers: crossSite }), 1);
     const deleted = await subject.delete(deleteRequest(crossSite), 1);
 
     expect(posted.status).toBe(403);
+    expect(patched.status).toBe(403);
     expect(((await posted.json()) as { error: string }).error).toBe('cross-site requests are not allowed');
     expect(deleted.status).toBe(403);
     expect(((await deleted.json()) as { error: string }).error).toBe('cross-site requests are not allowed');
@@ -256,6 +355,10 @@ describe('ProjectController writes', () => {
       content: '<p>Body</p>',
       isHidden: false,
     });
+    const persisted = await repository.findById(1);
+    expect(persisted?.name).toBe('Telegram Bot v2');
+    expect(persisted?.icon).toBe('database');
+    expect(persisted?.tags).toEqual(['Go']);
   });
 
   test('a photo over 2 MB is refused and nothing is saved', async () => {

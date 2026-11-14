@@ -1,3 +1,4 @@
+<script src="/public/project-edits.js"></script>
 <script>
 (() => {
   function escapeHtml(str) {
@@ -52,9 +53,7 @@
   } catch (err) {
     console.error('Failed to parse admin limits JSON', err);
   }
-  const maxImageBytes = Number(limits.maxImageBytes) || 0;
-  const maxImageMb = Math.round(maxImageBytes / (1024 * 1024));
-
+  let edits;
   let currentProjectId = null;
   let currentIcon = null;
   let currentImage = '';
@@ -277,6 +276,7 @@
     }
 
     currentProjectId = proj.id;
+    edits = createProjectEdits({ project: proj, limits });
     currentIcon = proj.icon || null;
     currentImage = proj.image || '';
 
@@ -306,6 +306,7 @@
 
   function selectNewProject() {
     currentProjectId = null;
+    edits = createProjectEdits({ project: null, limits });
     currentIcon = null;
     currentImage = '';
 
@@ -340,28 +341,30 @@
       photoInput.click();
     });
 
-    photoInput.addEventListener('change', (e) => {
+    photoInput.addEventListener('change', async (e) => {
       const file = e.target.files?.[0];
-      if (!file) return;
-
-      if (maxImageBytes > 0 && file.size > maxImageBytes) {
-        showStatus(`File exceeds ${maxImageMb} MB limit (${(file.size / (1024 * 1024)).toFixed(2)} MB). Refused before reading.`, true);
+      if (!file || inFlight) {
         photoInput.value = '';
         return;
       }
-
-      const reader = new FileReader();
-      reader.onload = (loadEvent) => {
-        currentImage = typeof loadEvent.target?.result === 'string' ? loadEvent.target.result : '';
-        updatePhotoPreview();
+      const session = edits;
+      inFlight = true;
+      setDisabled(true);
+      try {
+        const result = await session.readImage(file);
+        if (session !== edits) return;
+        if (result.ok) {
+          currentImage = result.value;
+          updatePhotoPreview();
+          clearStatus();
+        } else {
+          showStatus(result.message, true);
+        }
+      } finally {
         photoInput.value = '';
-        clearStatus();
-      };
-      reader.onerror = () => {
-        showStatus('Failed to read file as data URL', true);
-        photoInput.value = '';
-      };
-      reader.readAsDataURL(file);
+        inFlight = false;
+        setDisabled(false);
+      }
     });
   }
 
@@ -381,6 +384,7 @@
   async function handleSave() {
     if (inFlight) return;
     const targetId = currentProjectId;
+    const session = edits;
     const nameVal = formName ? formName.value.trim() : '';
     if (!nameVal) {
       showStatus('Project name is required', true);
@@ -409,56 +413,22 @@
     showStatus('Saving project to database…', false);
 
     try {
-      if (targetId === null) {
-        const res = await fetch('/api/projects', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-
-        if (res.status === 201) {
-          const data = await res.json();
-          projects.push(data.project);
-          inFlight = false;
-          setDisabled(false);
-          if (currentProjectId === null) {
-            selectProject(data.project.id);
-          } else {
-            renderProjectList();
-          }
-          showStatus(`Project created successfully (#${data.project.id})`, false);
-        } else {
-          const data = await res.json().catch(() => ({}));
-          showStatus(data.error || 'Failed to create project', true);
-        }
-      } else {
-        const res = await fetch(`/api/projects/${targetId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          const idx = projects.findIndex((p) => p.id === targetId);
-          if (idx !== -1) {
-            projects[idx] = data.project;
-          }
-          inFlight = false;
-          setDisabled(false);
-          if (currentProjectId === targetId) {
-            selectProject(data.project.id);
-          } else {
-            renderProjectList();
-          }
-          showStatus('Project saved successfully', false);
-        } else {
-          const data = await res.json().catch(() => ({}));
-          showStatus(data.error || 'Failed to update project', true);
-        }
+      const result = await session.save(payload);
+      if (!result.ok) {
+        showStatus(result.message, true);
+        return;
       }
-    } catch (_err) {
-      showStatus('Network error while saving project', true);
+      const saved = result.value;
+      if (targetId === null) projects.push(saved);
+      else {
+        const idx = projects.findIndex((p) => p.id === targetId);
+        if (idx !== -1) projects[idx] = saved;
+      }
+      inFlight = false;
+      setDisabled(false);
+      if (edits === session) selectProject(saved.id);
+      else renderProjectList();
+      showStatus(targetId === null ? `Project created successfully (#${saved.id})` : 'Project saved successfully', false);
     } finally {
       inFlight = false;
       setDisabled(false);
@@ -483,6 +453,7 @@
   async function handleDelete() {
     if (inFlight) return;
     const targetId = currentProjectId;
+    const session = edits;
     if (targetId === null) return;
     const proj = projects.find((p) => p.id === targetId);
     const confirmed = window.confirm(`Are you sure you want to permanently delete "${proj ? proj.name : 'this project'}"?`);
@@ -493,26 +464,20 @@
     showStatus('Deleting project…', false);
 
     try {
-      const res = await fetch(`/api/projects/${targetId}`, {
-        method: 'DELETE',
-      });
-
-      if (res.status === 204) {
+      const result = await session.remove();
+      if (result.ok) {
         projects = projects.filter((p) => p.id !== targetId);
         inFlight = false;
         setDisabled(false);
-        if (currentProjectId === targetId) {
+        if (edits === session) {
           selectNewProject();
         } else {
           renderProjectList();
         }
         showStatus('Project deleted successfully', false);
       } else {
-        const data = await res.json().catch(() => ({}));
-        showStatus(data.error || 'Failed to delete project', true);
+        showStatus(result.message, true);
       }
-    } catch (_err) {
-      showStatus('Network error while deleting project', true);
     } finally {
       inFlight = false;
       setDisabled(false);

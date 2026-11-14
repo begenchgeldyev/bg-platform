@@ -1,14 +1,12 @@
-import { Injectable, type ProjectsRepository } from '@bg/core';
+import { Injectable, type Project, type ProjectAccessResolver, type ProjectsRepository } from '@bg/core';
 import { errorResponse, readJsonWithin, refuseCrossSite, refuseNonJson } from '../http/requests';
 import { type Lang, resolveLang, t } from '../i18n';
-import { renderComponentTemplate, renderDocument } from '../site';
+import { renderComponentTemplate, renderDynamicPage } from '../site';
 import { type ProjectArt, projectArt } from './project-art';
 import { projectIcon } from './project-icons';
 import { PROJECT_LIMITS, parseNewProject, parseProjectChanges } from './project-input';
 
-type ProjectRecord = Awaited<ReturnType<ProjectsRepository['list']>>[number];
-
-export type CanEditProjects = (req: Request) => Promise<boolean>;
+export type ProjectControllerRepository = Pick<ProjectsRepository, 'list' | 'findById' | 'create' | 'updateById' | 'deleteById'>;
 
 function escapeHtml(value: string) {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
@@ -86,7 +84,7 @@ function renderArtSources(art: ProjectArt, sizes: string, lazy: boolean) {
     .join('');
 }
 
-async function renderProjectCard(project: ProjectRecord, lang: Lang) {
+async function renderProjectCard(project: Project, lang: Lang) {
   const name = escapeHtml(project.name);
   const description = escapeHtml(project.description?.trim() || t(lang, 'projectNoDescription'));
   const art = projectArt(project.image);
@@ -115,7 +113,7 @@ async function renderProjectCard(project: ProjectRecord, lang: Lang) {
   });
 }
 
-async function renderProjectsFragment(projects: ProjectRecord[], lang: Lang) {
+async function renderProjectsFragment(projects: Project[], lang: Lang) {
   if (projects.length === 0) {
     return renderComponentTemplate('projects/empty-state.html', {
       emptyTitle: lang === 'ru' ? 'Пока нет опубликованных проектов' : 'No published projects yet',
@@ -130,7 +128,7 @@ async function renderProjectEditor() {
   return renderComponentTemplate('projects/editor.html');
 }
 
-async function renderProjectEditorScript(project: ProjectRecord) {
+async function renderProjectEditorScript(project: Project) {
   const state = serializeForScript({
     id: project.id,
     name: project.name,
@@ -142,11 +140,12 @@ async function renderProjectEditorScript(project: ProjectRecord) {
 
   return renderComponentTemplate('projects/editor-script.html', {
     projectMode: escapeHtml(state),
+    projectLimits: escapeHtml(serializeForScript({ maxImageBytes: PROJECT_LIMITS.maxImageBytes })),
     emptyContentHtmlAttr: escapeHtml(await renderComponentTemplate('projects/content-empty.html')),
   });
 }
 
-async function renderProjectPage(req: Request, project: ProjectRecord, canEdit: boolean) {
+async function renderProjectPage(req: Request, project: Project, canEdit: boolean) {
   const lang = resolveLang(req);
   const description = project.description?.trim() || t(lang, 'projectNoDescription');
   const image = project.image?.trim();
@@ -203,36 +202,33 @@ async function renderProjectPage(req: Request, project: ProjectRecord, canEdit: 
     visibility: escapeHtml(visibility),
   });
 
-  const projectTitle = `${escapeHtml(project.name.toUpperCase())} — BEGENCH_GELDYEV@ROOT:~$`;
+  return renderDynamicPage(req, {
+    page: 'project',
+    title: `${project.name.toUpperCase()} — BEGENCH_GELDYEV@ROOT:~$`,
+    contentHtml,
+  });
+}
 
-  return new Response(
-    await renderDocument(
-      {
-        title: { en: projectTitle, ru: projectTitle },
-        fragmentFile: 'projects.html',
-        activeNav: 'projects',
-        brandIsLink: true,
-        footerVariant: 'default',
-        showTerminalIcon: true,
-      },
-      contentHtml,
-      lang,
-    ),
-    {
-      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+function projectNotFound(req: Request) {
+  return new Response(req.method === 'HEAD' ? null : 'Not Found', {
+    status: 404,
+    headers: {
+      'Cache-Control': 'no-store',
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Content-Length': String(Buffer.byteLength('Not Found')),
     },
-  );
+  });
 }
 
 @Injectable()
 export class ProjectController {
   constructor(
-    private readonly projectsRepository: ProjectsRepository,
-    private readonly canEditProjects: CanEditProjects,
+    private readonly projectsRepository: ProjectControllerRepository,
+    private readonly projectAccess: ProjectAccessResolver,
   ) {}
 
   async get(req: Request) {
-    const items = await this.projectsRepository.list({ includeHidden: await this.canEditProjects(req) });
+    const items = await this.projectsRepository.list({ includeHidden: (await this.projectAccess(req)) === 'editor' });
     if (req.headers.get('HX-Request') === 'true') {
       return new Response(await renderProjectsFragment(items, resolveLang(req)), {
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -250,7 +246,7 @@ export class ProjectController {
       return { ok: false, response: crossSite };
     }
 
-    if (!(await this.canEditProjects(req))) {
+    if ((await this.projectAccess(req)) !== 'editor') {
       return { ok: false, response: errorResponse(403, 'not allowed') };
     }
 
@@ -302,7 +298,7 @@ export class ProjectController {
       return crossSite;
     }
 
-    if (!(await this.canEditProjects(req))) {
+    if ((await this.projectAccess(req)) !== 'editor') {
       return errorResponse(403, 'not allowed');
     }
 
@@ -317,12 +313,12 @@ export class ProjectController {
   async getPageById(req: Request, id: number) {
     const project = await this.projectsRepository.findById(id);
     if (!project) {
-      return new Response('Not Found', { status: 404 });
+      return projectNotFound(req);
     }
 
-    const allowEdit = await this.canEditProjects(req);
+    const allowEdit = (await this.projectAccess(req)) === 'editor';
     if (project.isHidden && !allowEdit) {
-      return new Response('Not Found', { status: 404 });
+      return projectNotFound(req);
     }
 
     return await renderProjectPage(req, project, allowEdit);

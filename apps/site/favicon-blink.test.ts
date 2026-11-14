@@ -190,9 +190,8 @@ describe('site icon shared head and no-JavaScript fallback', () => {
       checkHead(await (response as Response).text());
     }
     const controller = new AdminController({
-      projectsRepository: { list: async () => [] } as never,
-      canEditProjects: async () => false,
-      sessionEmail: () => null,
+      projectsRepository: { list: async () => [] },
+      projectAccess: async () => 'visitor',
     });
     checkHead(await (await controller.page(new Request('http://localhost/admin'))).text());
   });

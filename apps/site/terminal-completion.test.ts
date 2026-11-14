@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { AskChat, AskHandlers } from './client/ask-chat';
+import type { AskChat, AskResult } from './client/ask-chat';
 
 /**
  * Executes the real inline terminal script from terminal-emulator.html against a
@@ -57,7 +57,7 @@ class StubElement {
     this.selectionEnd = end;
   }
 
-  focus() {}
+  focus = (_options?: { preventScroll: boolean }) => {};
   remove() {}
   replaceChildren(...nodes: StubElement[]) {
     this.children = nodes;
@@ -100,7 +100,7 @@ const inlineScript = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>
 if (!inlineScript) throw new Error('terminal emulator inline script not found');
 const terminalScript = inlineScript;
 
-function createTerminal(assistant?: AskChat) {
+function createTerminal(assistant?: AskChat, lang = 'en') {
   const elements = new Map<string, StubElement>();
   for (const id of [
     'terminal-wrap',
@@ -120,13 +120,16 @@ function createTerminal(assistant?: AskChat) {
   body.children.push(inputLine);
 
   const documentStub = {
-    documentElement: { lang: 'en' },
+    documentElement: { lang },
+    activeElement: input as StubElement | null,
+    body: new StubElement('document-body'),
     getElementById: (id: string) => elements.get(id) ?? null,
     createElement: (tag: string) => new StubElement(tag),
   };
   const navigations: string[] = [];
   const opened: string[] = [];
   const windowStub = {
+    matchMedia: (query: string) => ({ matches: query === '(pointer: fine)', media: query }),
     getSelection: () => null,
     askChat: assistant,
     location: {
@@ -135,6 +138,11 @@ function createTerminal(assistant?: AskChat) {
       },
     },
     open: (url: string) => opened.push(url),
+  };
+  const focuses: { preventScroll: boolean }[] = [];
+  input.focus = (options) => {
+    documentStub.activeElement = input;
+    if (options) focuses.push(options);
   };
 
   const run = new Function('document', 'window', 'performance', terminalScript);
@@ -148,6 +156,8 @@ function createTerminal(assistant?: AskChat) {
 
   return {
     input,
+    document: documentStub,
+    focuses,
     status: elements.get('terminal-status') as StubElement,
     prompt: elements.get('terminal-prompt') as StubElement,
     loader: elements.get('terminal-loader') as StubElement,
@@ -365,19 +375,19 @@ describe('direct terminal AI', () => {
     expect(terminal.appended()).toBe(transcript);
     expect(terminal.input.readOnly).toBe(true);
   });
-  test('hello is a direct message and ask-prefixed prose is forwarded in full', () => {
+  test('hello is a direct message and ask-prefixed prose is forwarded in full', async () => {
     const questions: string[] = [];
     const terminal = createTerminal({
       busy: () => false,
-      ask: async (question, handlers) => {
+      ask: async (question) => {
         questions.push(question);
-        handlers.onText('Answer');
-        handlers.onDone();
+        return { ok: true, text: 'Answer' };
       },
     });
     for (const line of ['hello', 'ask', 'ask  Where do you work?']) {
       terminal.setLine(line);
       terminal.press('Enter');
+      await Promise.resolve();
     }
     expect(questions).toEqual(['hello', 'ask', 'ask  Where do you work?']);
   });
@@ -399,53 +409,48 @@ describe('direct terminal AI', () => {
     expect(commands.appended()).toContain('whoami');
   });
 
-  test('offline, busy and stream failures have no ask prefix and include safe retry guidance', () => {
+  test('offline, busy and stream failures have no ask prefix and include safe retry guidance', async () => {
     const offline = createTerminal();
     offline.setLine('hello');
     offline.press('Enter');
     expect(offline.appended()).not.toContain('ask:');
     expect(offline.appended()).toContain('try again');
-    const busy = createTerminal({ busy: () => true, ask: async () => {} });
+    const busy = createTerminal({ busy: () => true, ask: async () => ({ ok: false, reason: 'busy' }) });
     busy.setLine('hello');
     busy.press('Enter');
     expect(busy.appended()).not.toContain('ask:');
     expect(busy.appended()).toBe('');
     expect(busy.status.textContent).toBe('Preparing a reply…');
     expect(busy.input.value).toBe('hello');
-    for (const message of [
-      'SECRET provider stack <img src=x>',
-      'rate limit reached, try again in a few minutes',
-      'questions are limited to 500 characters',
-    ]) {
+    for (const reason of ['unavailable', 'rate-limit', 'question-length', 'busy'] as const) {
       const terminal = createTerminal({
         busy: () => false,
-        ask: async (_question, handlers) => {
-          handlers.onError(message);
-        },
+        ask: async () => ({ ok: false, reason }),
       });
       terminal.setLine('hello');
       terminal.press('Enter');
+      await Promise.resolve();
       const error = terminal.body.children.flatMap((line) => line.children).find((child) => child.className === 'text-error/80');
       expect(error?.textContent).not.toContain('ask:');
       expect(error?.textContent).not.toContain('SECRET');
       expect(error?.textContent).toContain('try again');
-      if (message.startsWith('rate')) expect(error?.textContent).toContain('Rate limit reached');
-      if (message.startsWith('questions')) expect(error?.textContent).toContain('500 characters');
+      if (reason === 'rate-limit') expect(error?.textContent).toContain('Rate limit reached');
+      if (reason === 'question-length') expect(error?.textContent).toContain('500 characters');
     }
   });
-  test('sends ordinary prose, even command-word sentences, to askChat without navigation', () => {
+  test('sends ordinary prose, even command-word sentences, to askChat without navigation', async () => {
     const questions: string[] = [];
     const terminal = createTerminal({
       busy: () => false,
-      ask: async (question, handlers) => {
+      ask: async (question) => {
         questions.push(question);
-        handlers.onText('<img src=x onerror=alert(1)>');
-        handlers.onDone();
+        return { ok: true, text: '<img src=x onerror=alert(1)>' };
       },
     });
     for (const question of ['What have you built?', 'projects you built?', 'logs from your career?', 'open your best project']) {
       terminal.setLine(question);
       terminal.press('Enter');
+      await Promise.resolve();
     }
     expect(questions).toEqual(['What have you built?', 'projects you built?', 'logs from your career?', 'open your best project']);
     expect(terminal.navigations).toEqual([]);
@@ -454,17 +459,15 @@ describe('direct terminal AI', () => {
     expect(terminal.input.value).toBe('open your best project');
   });
 
-  test('prose and streamed errors remain inert text, including entity-encoded markup', () => {
+  test('prose and completed answers remain inert text, including entity-encoded markup', async () => {
     const unsafe = '<img src=x onerror=alert(1)>&lt;script&gt;';
     const terminal = createTerminal({
       busy: () => false,
-      ask: async (_question, handlers) => {
-        handlers.onText(unsafe);
-        handlers.onDone();
-      },
+      ask: async () => ({ ok: true, text: unsafe }),
     });
     terminal.setLine(`What is ${unsafe}?`);
     terminal.press('Enter');
+    await Promise.resolve();
     expect(terminal.appended()).not.toContain(unsafe);
     expect(terminal.appended()).toContain('&amp;lt;script&amp;gt;');
     expect(terminal.answers()[0]?.textContent).toBe(unsafe);
@@ -477,6 +480,7 @@ describe('direct terminal AI', () => {
       busy: () => true,
       ask: async () => {
         calls++;
+        return { ok: false, reason: 'busy' };
       },
     });
     terminal.setLine('constructor');
@@ -502,19 +506,19 @@ describe('direct terminal AI', () => {
     expect(terminal.navigations).toEqual(['/projects']);
   });
 
-  test('retains literal manual commands and treats ask as ordinary prose, safely escaping echo/errors', () => {
+  test('retains literal manual commands and treats ask as ordinary prose, safely escaping echo/errors', async () => {
     const questions: string[] = [];
     const terminal = createTerminal({
       busy: () => false,
-      ask: async (question, handlers) => {
+      ask: async (question) => {
         questions.push(question);
-        handlers.onText('Answer');
-        handlers.onDone();
+        return { ok: true, text: 'Answer' };
       },
     });
     for (const line of ['whoami', 'cat philosophy.txt', 'ask Where do you work?', 'cat <img&x>']) {
       terminal.setLine(line);
       terminal.press('Enter');
+      await Promise.resolve();
     }
     expect(questions).toEqual(['ask Where do you work?']);
     expect(terminal.appended()).toContain('Performance is not a feature');
@@ -524,12 +528,11 @@ describe('direct terminal AI', () => {
 });
 
 function pendingAssistant() {
-  const calls: { question: string; handlers: AskHandlers }[] = [];
+  const calls: { question: string; resolve: (result: AskResult) => void }[] = [];
   const assistant: AskChat = {
     busy: () => false,
-    ask(question, handlers) {
-      calls.push({ question, handlers });
-      return new Promise(() => {});
+    ask(question) {
+      return new Promise((resolve) => calls.push({ question, resolve }));
     },
   };
   return { calls, assistant };
@@ -552,7 +555,7 @@ describe('calm terminal turns', () => {
     expect(terminal.input.value).toBe('');
   });
 
-  test('buffers cumulative text until done and shows just one final inert answer', () => {
+  test('waits for one result and shows just one final inert answer', async () => {
     const { calls, assistant } = pendingAssistant();
     const terminal = createTerminal(assistant);
     terminal.setLine('What do you build?');
@@ -561,11 +564,10 @@ describe('calm terminal turns', () => {
     expect(terminal.loader.hidden).toBe(false);
     expect(terminal.input.placeholder).toBe('Preparing a reply…');
     const top = terminal.body.scrollTop;
-    calls[0].handlers.onText('Partial');
-    calls[0].handlers.onText('A complete <b>literal</b> answer.');
     expect(terminal.answers()).toHaveLength(0);
     expect(terminal.body.scrollTop).toBe(top);
-    calls[0].handlers.onDone();
+    calls[0].resolve({ ok: true, text: 'A complete <b>literal</b> answer.' });
+    await Promise.resolve();
     expect(terminal.answers()).toHaveLength(1);
     expect(terminal.answers()[0].textContent).toBe('A complete <b>literal</b> answer.');
     expect(terminal.answers()[0].innerHTML).toBe('');
@@ -575,7 +577,7 @@ describe('calm terminal turns', () => {
     expect(terminal.status.textContent).toBe('Reply ready.');
   });
 
-  test('pending turn blocks submit/history/clear/completion but leaves both Tab directions native', () => {
+  test('pending turn blocks submit/history/clear/completion but leaves both Tab directions native', async () => {
     const { calls, assistant } = pendingAssistant();
     const terminal = createTerminal(assistant);
     terminal.setLine('Question');
@@ -588,8 +590,8 @@ describe('calm terminal turns', () => {
     expect(terminal.input.value).toBe('');
     expect(terminal.appended()).toBe(transcript);
     expect(calls).toHaveLength(1);
-    calls[0].handlers.onText('Answer');
-    calls[0].handlers.onDone();
+    calls[0].resolve({ ok: true, text: 'Answer' });
+    await Promise.resolve();
     terminal.press('ArrowUp');
     expect(terminal.input.value).toBe('Question');
     terminal.setLine('cat phi');
@@ -597,39 +599,44 @@ describe('calm terminal turns', () => {
     expect(terminal.input.value).toBe('cat philosophy.txt');
   });
 
-  test('partial failure restores retry draft and stale callbacks cannot overwrite the next turn', () => {
+  test('failure restores retry draft and a previously settled promise cannot overwrite the next turn', async () => {
     const { calls, assistant } = pendingAssistant();
     const terminal = createTerminal(assistant);
     terminal.setLine('Retry this');
     terminal.press('Enter');
-    calls[0].handlers.onText('Do not show partial text');
-    calls[0].handlers.onError('SECRET internal error');
+    calls[0].resolve({ ok: false, reason: 'unavailable' });
+    await Promise.resolve();
     expect(terminal.input.value).toBe('Retry this');
     expect(terminal.input.readOnly).toBe(false);
     expect(terminal.answers()).toHaveLength(0);
     expect(terminal.status.textContent).toBe('The assistant is unavailable. Please try again.');
     terminal.press('Enter');
-    calls[0].handlers.onText('Stale text');
-    calls[0].handlers.onDone();
+    calls[0].resolve({ ok: true, text: 'Stale text' });
+    await Promise.resolve();
     expect(terminal.input.readOnly).toBe(true);
     expect(terminal.answers()).toHaveLength(0);
-    calls[1].handlers.onText('Recovered');
-    calls[1].handlers.onDone();
-    calls[1].handlers.onDone();
-    calls[1].handlers.onError('Late error');
+    calls[1].resolve({ ok: true, text: 'Recovered' });
+    calls[1].resolve({ ok: false, reason: 'unavailable' });
+    await Promise.resolve();
     expect(terminal.answers()).toHaveLength(1);
     expect(terminal.answers()[0].textContent).toBe('Recovered');
     expect(terminal.input.value).toBe('');
   });
 
-  test.each(['throw', 'reject', 'missing callback', 'empty done'])('%s cannot leave a turn locked', async (failure) => {
+  test.each([
+    'throw',
+    'reject',
+    'missing result',
+    'empty answer',
+    'whitespace answer',
+  ])('%s cannot leave a turn locked', async (failure) => {
     const terminal = createTerminal({
       busy: () => false,
-      ask(_question, handlers) {
+      ask() {
         if (failure === 'throw') throw new Error('SECRET');
         if (failure === 'reject') return Promise.reject(new Error('SECRET'));
-        if (failure === 'empty done') handlers.onDone();
-        return Promise.resolve();
+        if (failure === 'missing result') return Promise.resolve(undefined as unknown as AskResult);
+        return Promise.resolve({ ok: true, text: failure === 'empty answer' ? '' : ' \n ' });
       },
     });
     terminal.setLine('Keep my draft');
