@@ -97,7 +97,7 @@ async function renderProjectCard(project: ProjectRecord, lang: Lang) {
   // three originals on mobile. The gallery's observer also handles HTMX swaps.
   const pictureHtml = art
     ? `<picture>
-        ${renderArtSources(art, CARD_COVER_SIZES, true)}<img data-project-cover data-src="${escapeHtml(art.image)}" width="${art.width}" height="${art.height}" loading="lazy" decoding="async" alt="">
+        ${renderArtSources(art, CARD_COVER_SIZES, true)}<img data-project-cover${art.motion ? ` data-project-motion="${escapeHtml(art.motion.card)}"` : ''} data-src="${escapeHtml(art.image)}" width="${art.width}" height="${art.height}" loading="lazy" decoding="async" alt="">
       </picture>`
     : '';
 
@@ -180,7 +180,7 @@ async function renderProjectPage(req: Request, project: ProjectRecord, canEdit: 
   const previewSize = art?.avif ? ` width="${art.width}" height="${art.height}"` : '';
   const imageBlock = art
     ? `<div class="overflow-hidden border border-outline-variant/30 bg-surface" ${canEdit ? 'data-admin-editable="image"' : ''}>
-        <picture>${canEdit ? '' : `\n        ${renderArtSources(art, DETAIL_COVER_SIZES, false)}`}<img data-project-preview class="max-h-[520px] w-full object-cover" src="${escapeHtml(art.image)}"${previewSize} fetchpriority="high" decoding="async" alt="${previewAlt}"></picture>
+        <picture>${canEdit ? '' : `\n        ${renderArtSources(art, DETAIL_COVER_SIZES, false)}`}<img data-project-preview${!canEdit && art.motion ? ` data-project-motion="${escapeHtml(art.motion.page)}"` : ''} class="max-h-[520px] w-full object-cover" src="${escapeHtml(art.image)}"${previewSize} fetchpriority="high" decoding="async" alt="${previewAlt}"></picture>
       </div>`
     : `<div class="overflow-hidden border border-outline-variant/30 bg-surface" hidden>
         <img data-project-preview class="max-h-[520px] w-full object-cover" src="" alt="${previewAlt}"/>

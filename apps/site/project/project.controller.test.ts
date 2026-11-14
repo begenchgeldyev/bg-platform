@@ -341,6 +341,7 @@ describe('project cards', () => {
     expect(html).toContain('/public/projects/pantheon-pixel-1200.avif 1200w, /public/projects/pantheon-pixel-1448.avif 1448w"');
     expect(html).toContain('<picture>');
     expect(html).toContain(' data-src="/public/projects/pantheon-pixel.png"');
+    expect(html).toContain('data-project-motion="/public/projects/pantheon-pixel-motion-480.webp"');
     expect(html).not.toMatch(/\ssrc(?:set)?\s*=/);
     expect(html).toContain('width="1448" height="1086"');
     expect(html).toContain('loading="lazy"');
@@ -351,6 +352,7 @@ describe('project cards', () => {
     expect(custom).toContain('<picture>');
     expect(custom).toContain(' data-src="/public/custom.png"');
     expect(custom).not.toMatch(/<source/);
+    expect(custom).not.toContain('data-project-motion');
     expect(custom).not.toMatch(/\ssrc(?:set)?\s*=/);
   });
 
@@ -368,11 +370,13 @@ describe('project cards', () => {
     expect(html).not.toContain('loading="lazy"');
     expect(html).not.toContain('data-srcset');
     expect(html).toContain('/public/projects-motion.js');
+    expect(html).toContain('data-project-motion="/public/projects/interpreter-pixel-motion-960.webp"');
     const owner = controller({ projects: [project({ image: '/public/projects/interpreter-pixel.png' })], canEdit: true });
     const ownerHtml = await (await owner.controller.getPageById(new Request('http://localhost/projects/1'), 1)).text();
     expect(ownerHtml).toContain('data-project-preview');
     expect(ownerHtml).toContain('/public/projects-motion.js');
     expect(ownerHtml).not.toMatch(/<source/);
+    expect(ownerHtml).not.toContain('data-project-motion=');
   });
 
   test('missing or unsafe image URLs keep a useful fallback, never an empty or executable image', async () => {
