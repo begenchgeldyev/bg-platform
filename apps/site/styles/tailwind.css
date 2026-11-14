@@ -1,4 +1,11 @@
 /* biome-ignore-all lint/suspicious/noUnknownAtRules: processed by the Tailwind CLI, not the browser. */
 @tailwind base;
+@layer base {
+  :root {
+    /* One UI accent; RGB channels also support Tailwind opacity modifiers. */
+    --accent-rgb: 0 255 65;
+    --accent: rgb(var(--accent-rgb));
+  }
+}
 @tailwind components;
 @tailwind utilities;
