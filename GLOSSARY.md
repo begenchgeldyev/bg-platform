@@ -34,6 +34,14 @@ _Avoid_: locale, lang code, translation
 The one person allowed to edit projects, and the only identity the site authenticates.
 _Avoid_: user, admin
 
+**Terminal**:
+The home page's assistant prompt: an intro line, a `>` prompt and a text input, plus the transcript of what has been asked. It is the only place a visitor talks to the assistant.
+_Avoid_: console, chat window, shell, REPL
+
+**Prompt line**:
+The terminal's single input line: the `>` prompt followed by the text input. Typing goes there, and replies are appended above it.
+_Avoid_: command bar, input field, textbox, composer
+
 ### Architecture
 
 **Admin**:
