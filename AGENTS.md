@@ -41,6 +41,15 @@ docker compose -f infra/compose.yml up -d  # caddy, site, postgres
 
 **Local env files:** `apps/site/.env` (for `bun run dev`) and `packages/core/.env` (for `bun run db:*`) — both hold `DATABASE_URL` (and `ADMIN_SECRET` for site). `infra/site.env` (created from `infra/site.env.example`) is the one Compose loads for the containerized site.
 
+## Browser checks
+
+Use the globally installed `agent-browser` when real browser verification or interaction can answer questions static tests cannot: HTMX navigation, forms, keyboard behavior, or language flows. Prefer a local dev instance. Browser checks supplement, not replace, the relevant Bun validation.
+
+- Before browser use, load the official agent-browser skill or read `agent-browser skills get core`; follow its current CLI guidance rather than adding a repository guide or dependency.
+- Choose a unique browser session for your task and pass `--session <your-session>` explicitly on every browser command. Use the snapshot → refs → interaction → fresh snapshot/DOM inspection loop; refresh refs after navigation or DOM changes. Close only your own session when finished: `agent-browser --session <your-session> close`.
+- Inspect DOM state and behavior by default; take screenshots only to answer a specific visual question, not as a blanket requirement.
+- Stay within the task's authorization: get explicit approval before production access, Admin writes, or AI requests through the Terminal. Do not change the app runtime or authorization policies to enable browser checks.
+
 ## Architecture
 
 This is a personal portfolio site with a terminal/hacker aesthetic (dark theme, green accents, scanline animation).
