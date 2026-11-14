@@ -96,6 +96,30 @@ try {
     await page.screenshot({ path: `${output}/focus-${lang}-border.png` });
     console.log(`PASS terminal border is focus-independent ${lang} (${focusedBorder})`);
 
+    // 6. Any click in the terminal returns to the prompt, unless a selection is live.
+    await headerLink.focus();
+    await page
+      .locator('[data-answer]')
+      .first()
+      .click({ position: { x: 40, y: 8 } });
+    assert.equal(await input.evaluate(inputIsActive), true, 'clicking the transcript focuses the prompt');
+    await page.locator('[data-terminal-toolbar]').click({ position: { x: 12, y: 12 } });
+    assert.equal(await input.evaluate(inputIsActive), true, 'clicking the chrome focuses the prompt');
+    const keptFocus = await page.evaluate(() => {
+      const answer = document.querySelector('[data-answer]') as Element;
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      const range = document.createRange();
+      range.selectNodeContents(answer);
+      getSelection()?.removeAllRanges();
+      getSelection()?.addRange(range);
+      answer.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      return document.activeElement?.id ?? '';
+    });
+    assert.notEqual(keptFocus, 'terminal-input', 'a live text selection keeps focus away from the prompt');
+    assert.ok((await page.evaluate(() => getSelection()?.toString() ?? '')).length > 0);
+    await page.evaluate(() => getSelection()?.removeAllRanges());
+    console.log(`PASS terminal clicks return to the prompt unless text is selected ${lang}`);
+
     // 1b. A history return re-runs the component, so the prompt takes focus again.
     await page.goto('/cv', { waitUntil: 'domcontentloaded' });
     await page.goBack({ waitUntil: 'domcontentloaded' });

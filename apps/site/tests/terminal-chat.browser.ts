@@ -301,16 +301,18 @@ try {
     before,
   );
   assert.equal(await page.locator('header a[href="/cv"]').evaluate((element: Element) => document.activeElement === element), true);
+  // A live selection outranks click-to-focus; clearing it hands the prompt back.
+  await page.evaluate(() => getSelection()?.removeAllRanges());
   await page
     .locator('[data-answer]')
     .first()
     .click({ position: { x: 50, y: 10 } });
   assert.equal(
     await input.evaluate((element: Element) => document.activeElement === element),
-    false,
-    'transcript click no longer grabs the composer',
+    true,
+    'transcript click returns to the composer',
   );
-  console.log('PASS long answer begins in view; reader scroll/selection/focus stay unchanged');
+  console.log('PASS long answer begins in view; reader scroll/selection survive; a transcript click returns to the prompt');
   await context.close();
 
   for (const lang of ['en', 'ru']) {

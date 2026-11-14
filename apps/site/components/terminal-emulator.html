@@ -2,6 +2,7 @@
 <script>
 (() => {
   const body = document.getElementById('terminal-body');
+  const terminal = document.getElementById('terminal-wrap');
   const inputLine = document.getElementById('input-line');
   const input = document.getElementById('terminal-input');
   const prompt = document.getElementById('terminal-prompt');
@@ -42,8 +43,9 @@
     input.focus({ preventScroll: true });
   }
 
-  // Only the composer owns focus. Reading/selecting transcript text must not scroll or refocus it.
-  inputLine.addEventListener('click', () => {
+  // Clicking anywhere in the terminal returns to the prompt. A live text
+  // selection is left alone so drag-selected transcript text can still be copied.
+  terminal.addEventListener('click', () => {
     if (!window.getSelection()?.toString()) input.focus({ preventScroll: true });
   });
   body.addEventListener('scroll', () => {
