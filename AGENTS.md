@@ -6,6 +6,7 @@ This file provides guidance to coding agents when working with code in this repo
 
 - `GLOSSARY.md` — the canonical vocabulary. Use its terms in code, UI copy and new documents; the `_Avoid_` lines name the words they replace.
 - `docs/adr/` — accepted architecture decisions, each with the alternative it rejected. Read the relevant ADR before changing one.
+- Packages are deep modules: read [packages/README.md](./packages/README.md) before adding or importing one.
 
 ## Runtime
 
@@ -26,6 +27,7 @@ Run from the repo root (Bun workspace):
 bun run dev          # hot-reload dev server (delegates to apps/site)
 bun run start        # production server
 bun run lint         # biome check (no writes)
+bun run lint:boundaries # dependency-cruiser: package entry points, private tests/fixtures, no cycles
 bun run format       # biome check --write (formats + organizes imports)
 bun run db:generate  # generate SQL migrations from schema changes
 bun run db:migrate   # apply migrations to postgres
@@ -42,6 +44,10 @@ docker compose -f infra/compose.yml up -d  # caddy, site, postgres
 ## Architecture
 
 This is a personal portfolio site with a terminal/hacker aesthetic (dark theme, green accents, scanline animation).
+
+### Package entry points
+
+Packages under `packages/` expose their root files as public entry points; every subfolder is private. Use those entry points from apps, other packages, and package tests. See [packages/README.md](./packages/README.md) for the full convention and the copy/delete example template. Run `bun run lint:boundaries` after changing imports or package structure. Include this command when adding CI validation; it is not currently wired into CI.
 
 ### Request flow
 

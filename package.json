@@ -13,6 +13,7 @@
     "dev": "cd apps/site && bun run dev",
     "start": "cd apps/site && bun run start",
     "lint": "biome check .",
+    "lint:boundaries": "depcruise --config .dependency-cruiser.cjs apps packages",
     "format": "biome check --write .",
     "db:generate": "cd packages/core && bun run db:generate",
     "db:migrate": "cd packages/core && bun run db:migrate",
@@ -22,6 +23,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.4.11",
     "@types/bun": "latest",
+    "dependency-cruiser": "^18.7.2",
     "typescript": "^5.8.3"
   }
 }
