@@ -193,8 +193,8 @@ try {
   await page.waitForFunction(() => window.heroEvidence.timers.size === 1);
   await page.locator('[data-role-switch]').focus();
   await page.keyboard.press('Escape');
-  await page.locator('header a[href="/cv"]').click();
-  await page.waitForURL('**/cv');
+  await page.locator('header a[href="/resume"]').click();
+  await page.waitForURL('**/resume');
   assert.deepEqual(await page.evaluate(() => JSON.parse(sessionStorage.getItem('hero-pagehide') || '{}')), { timers: 0, frames: 0 });
   await page.goBack({ waitUntil: 'commit' });
   await page.waitForURL(`${baseURL}/`, { waitUntil: 'commit' });
@@ -254,8 +254,8 @@ try {
     assert.equal(await staticPage.locator('[data-role-label]').evaluate((label: Element) => getComputedStyle(label).position), 'absolute');
     assert.equal(await staticPage.locator('[data-role-controls]').count(), 0);
     await staticPage.screenshot({ path: `${output}/hero-${lang}-no-js.png` });
-    await staticPage.locator('header a[href="/cv"]').click();
-    await staticPage.waitForURL('**/cv');
+    await staticPage.locator('header a[href="/resume"]').click();
+    await staticPage.waitForURL('**/resume');
     console.log(`PASS static no-JS heading/navigation ${lang}`);
     await noJS.close();
   }

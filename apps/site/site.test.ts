@@ -6,14 +6,123 @@ import { renderPage, servePublicAsset } from './site';
 
 const FONT_PATH = '/public/fonts/OpenTUIMono-Regular.woff2';
 const SCRIPT_PATH = '/public/hero-role.js';
+const RESUME_PDF = '/public/Begench-Geldyev-Resume.pdf';
+const LEGACY_PDFS = ['/public/Begench Geldyev(CV).pdf', '/public/Begench%20Geldyev(CV).pdf'];
 
 function withHeaders(pathname: string, headers: Record<string, string>, method = 'GET') {
   return new Request(`http://localhost${pathname}`, { headers, method });
 }
 
+describe('canonical resume', () => {
+  test.each([
+    { lang: 'en', label: 'Resume', download: 'Download resume' },
+    { lang: 'ru', label: 'Резюме', download: 'Скачать резюме' },
+  ] as const)('renders a complete translated resume ($lang)', async ({ lang, label, download }) => {
+    const res = await renderPage('/resume', lang);
+    expect(res?.status).toBe(200);
+    const html = await (res as Response).text();
+    expect(html).toContain('href="/resume" aria-current="page"');
+    expect(html).toContain(`>${label}<`);
+    expect(html).toMatch(/<h1\b[^>]*>Begench Geldyev<\/h1>/);
+    expect(html).toContain(`[${label}]`);
+    const pageHeader = html.match(/<main\b[^>]*>\s*(<header\b[\s\S]*?<\/header>)/)?.[1] ?? '';
+    expect(pageHeader).toContain(download);
+    expect(pageHeader).toContain(`href="${RESUME_PDF}"`);
+    expect(pageHeader).toMatch(/<a\b[^>]*\bdownload\b[^>]*>/);
+    expect(html).not.toContain('<!-- missing:');
+    expect(html).not.toContain('{{');
+    expect(html).not.toContain('href="/cv"');
+  });
+
+  test.each(['GET', 'HEAD'])('redirects legacy %s before conditional page caching and preserves the query', async (method) => {
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      const canonical = await renderPage('/resume', 'en');
+      for (const search of ['', '?source=mail&return=%2Fprojects']) {
+        for (const tag of ['*', canonical?.headers.get('etag') ?? '"stale"']) {
+          const res = await renderPage('/cv', 'en', withHeaders(`/cv${search}`, { 'if-none-match': tag }, method));
+          expect(res?.status).toBe(308);
+          expect(res?.headers.get('location')).toBe(`/resume${search}`);
+          expect(await (res as Response).text()).toBe('');
+        }
+      }
+    } finally {
+      if (previous === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previous;
+    }
+  });
+
+  test('does not redirect unrelated paths', async () => {
+    expect(await renderPage('/cv/extra', 'en')).toBeNull();
+  });
+
+  test('development HEAD is bodyless with the GET byte length', async () => {
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+    try {
+      const get = await renderPage('/resume', 'ru');
+      expect(get?.status).toBe(200);
+      const html = await (get as Response).text();
+      const head = await renderPage('/resume', 'ru', withHeaders('/resume', {}, 'HEAD'));
+      expect(head?.status).toBe(200);
+      expect(head?.headers.get('content-length')).toBe(String(Buffer.byteLength(html)));
+      expect(head?.headers.get('etag')).toBeNull();
+      expect(await (head as Response).text()).toBe('');
+    } finally {
+      if (previous === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previous;
+    }
+  });
+
+  test.each(['en', 'ru'] as const)('home download uses the translated canonical asset (%s)', async (lang) => {
+    const html = await ((await renderPage('/', lang)) as Response).text();
+    expect(html).toContain(`href="${RESUME_PDF}"`);
+    expect(html).toContain(lang === 'en' ? 'Download resume' : 'Скачать резюме');
+  });
+});
+
+describe('resume PDF compatibility', () => {
+  test.each([RESUME_PDF, ...LEGACY_PDFS])('serves full bytes and PDF protocols at %s', async (path) => {
+    const res = await servePublicAsset(path);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('application/pdf');
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    expect(new TextDecoder().decode(bytes.slice(0, 5))).toBe('%PDF-');
+    const file = new Uint8Array(await Bun.file(join(import.meta.dir, 'public', 'Begench-Geldyev-Resume.pdf')).arrayBuffer());
+    expect(bytes).toEqual(file);
+    const canonical = await servePublicAsset(RESUME_PDF);
+    expect(canonical.status).toBe(200);
+    for (const header of ['etag', 'last-modified', 'cache-control', 'accept-ranges', 'content-type']) {
+      expect(res.headers.get(header)).toBe(canonical.headers.get(header));
+    }
+    expect(new Uint8Array(await canonical.arrayBuffer())).toEqual(bytes);
+    const head = await servePublicAsset(path, withHeaders(path, {}, 'HEAD'));
+    expect(head.status).toBe(200);
+    expect(head.headers.get('content-length')).toBe(String(bytes.length));
+    expect(await head.text()).toBe('');
+    for (const method of ['GET', 'HEAD']) {
+      const partial = await servePublicAsset(path, withHeaders(path, { range: 'bytes=0-99' }, method));
+      expect(partial.status).toBe(206);
+      expect(partial.headers.get('content-type')).toBe('application/pdf');
+      expect(partial.headers.get('content-length')).toBe('100');
+      expect(partial.headers.get('content-range')).toBe(`bytes 0-99/${bytes.length}`);
+      expect(new Uint8Array(await partial.arrayBuffer())).toEqual(method === 'HEAD' ? new Uint8Array() : bytes.slice(0, 100));
+      const invalid = await servePublicAsset(path, withHeaders(path, { range: 'bytes=999999999-' }, method));
+      expect(invalid.status).toBe(416);
+      expect(invalid.headers.get('content-range')).toBe(`bytes */${bytes.length}`);
+      expect(await invalid.text()).toBe('');
+      const cached = await servePublicAsset(path, withHeaders(path, { 'if-none-match': res.headers.get('etag') as string }, method));
+      expect(cached.status).toBe(304);
+      expect(cached.headers.get('etag')).toBe(res.headers.get('etag'));
+      expect(await cached.text()).toBe('');
+    }
+  });
+});
+
 describe('renderPage language selection', () => {
   test('renders the English fragment by default', async () => {
-    const res = await renderPage('/cv', 'en');
+    const res = await renderPage('/resume', 'en');
     expect(res).not.toBeNull();
     const html = await (res as Response).text();
     expect(html).toContain('Experience');
@@ -22,7 +131,7 @@ describe('renderPage language selection', () => {
   test('derives the translated filename and still serves 200', async () => {
     expect(localizedFragmentFile('nonexistent.html', 'ru')).toBe('nonexistent.ru.html');
 
-    const res = await renderPage('/cv', 'ru');
+    const res = await renderPage('/resume', 'ru');
     expect((res as Response).status).toBe(200);
   });
 
@@ -31,7 +140,7 @@ describe('renderPage language selection', () => {
   });
 
   test('sets the html lang attribute from the language', async () => {
-    const res = await renderPage('/cv', 'ru');
+    const res = await renderPage('/resume', 'ru');
     const html = await (res as Response).text();
     expect(html).toContain('lang="ru"');
   });
@@ -41,8 +150,8 @@ describe('static document titles', () => {
   test.each([
     { pathname: '/', lang: 'en', title: 'begenchgeldyev' },
     { pathname: '/', lang: 'ru', title: 'begenchgeldyev' },
-    { pathname: '/cv', lang: 'en', title: 'cv — begench_geldyev@root:~$' },
-    { pathname: '/cv', lang: 'ru', title: 'резюме — begench_geldyev@root:~$' },
+    { pathname: '/resume', lang: 'en', title: 'resume — begench_geldyev@root:~$' },
+    { pathname: '/resume', lang: 'ru', title: 'резюме — begench_geldyev@root:~$' },
     { pathname: '/logs', lang: 'en', title: 'logs — begench_geldyev@root:~$' },
     { pathname: '/logs', lang: 'ru', title: 'логи — begench_geldyev@root:~$' },
     { pathname: '/projects', lang: 'en', title: 'projects — begench_geldyev@root:~$' },
@@ -57,7 +166,7 @@ describe('static document titles', () => {
 
 describe('include resolution', () => {
   test('resolves an include whose filename contains a hyphen', async () => {
-    const res = await renderPage('/cv', 'en');
+    const res = await renderPage('/resume', 'en');
     const html = await (res as Response).text();
     expect(html).toContain('mouseenter');
     expect(html).not.toContain('#include');
@@ -66,37 +175,37 @@ describe('include resolution', () => {
 
 describe('chrome translation', () => {
   test('renders English navigation labels by default', async () => {
-    const res = await renderPage('/cv', 'en');
+    const res = await renderPage('/resume', 'en');
     const html = await (res as Response).text();
     expect(html).toContain('>Projects<');
     expect(html).toContain('>Logs<');
   });
 
   test('renders Russian navigation labels', async () => {
-    const res = await renderPage('/cv', 'ru');
+    const res = await renderPage('/resume', 'ru');
     const html = await (res as Response).text();
     expect(html).toContain('>Проекты<');
     expect(html).toContain('>Логи<');
     expect(html).toContain('>Резюме<');
   });
 
-  test('keeps the CV pdf label untranslated', async () => {
-    const res = await renderPage('/cv', 'ru');
+  test('translates the resume download label', async () => {
+    const res = await renderPage('/resume', 'ru');
     const html = await (res as Response).text();
-    expect(html).toContain('CV.pdf');
+    expect(html).toContain('Скачать резюме');
   });
 });
 
 describe('russian fragments', () => {
-  test('serves Russian CV prose', async () => {
-    const res = await renderPage('/cv', 'ru');
+  test('serves Russian resume prose', async () => {
+    const res = await renderPage('/resume', 'ru');
     const html = await (res as Response).text();
     expect(html).toContain('Опыт');
     expect(html).not.toContain('Software and hardware for radio-frequency');
   });
 
   test('keeps stack names untranslated', async () => {
-    const res = await renderPage('/cv', 'ru');
+    const res = await renderPage('/resume', 'ru');
     const html = await (res as Response).text();
     expect(html).toContain('Feature-Sliced Design');
     expect(html).toContain('TypeScript');
@@ -104,7 +213,7 @@ describe('russian fragments', () => {
   });
 
   test('still serves English prose on the English page', async () => {
-    const res = await renderPage('/cv', 'en');
+    const res = await renderPage('/resume', 'en');
     const html = await (res as Response).text();
     expect(html).toContain('Software and hardware for radio-frequency');
   });
@@ -150,7 +259,7 @@ describe('home page', () => {
 });
 
 describe('client-side identity', () => {
-  test.each(['/', '/projects', '/cv'])('no page ships client-side identity hooks (%s)', async (pathname) => {
+  test.each(['/', '/projects', '/resume'])('no page ships client-side identity hooks (%s)', async (pathname) => {
     const res = await renderPage(pathname, 'en');
     expect(res).not.toBeNull();
     const html = await (res as Response).text();
@@ -227,10 +336,10 @@ describe('public asset caching', () => {
 });
 
 describe('public asset ranges', () => {
-  const pdfPath = '/public/Begench%20Geldyev(CV).pdf';
+  const pdfPath = '/public/Begench-Geldyev-Resume.pdf';
 
   test('answers a byte range with 206 and the requested bytes', async () => {
-    const full = new Uint8Array(await Bun.file(join(import.meta.dir, 'public', 'Begench Geldyev(CV).pdf')).arrayBuffer());
+    const full = new Uint8Array(await Bun.file(join(import.meta.dir, 'public', 'Begench-Geldyev-Resume.pdf')).arrayBuffer());
     const res = await servePublicAsset(pdfPath, withHeaders(pdfPath, { range: 'bytes=0-99' }));
 
     expect(res.status).toBe(206);
@@ -244,7 +353,7 @@ describe('public asset ranges', () => {
   });
 
   test('supports an open-ended range', async () => {
-    const full = new Uint8Array(await Bun.file(join(import.meta.dir, 'public', 'Begench Geldyev(CV).pdf')).arrayBuffer());
+    const full = new Uint8Array(await Bun.file(join(import.meta.dir, 'public', 'Begench-Geldyev-Resume.pdf')).arrayBuffer());
     const res = await servePublicAsset(pdfPath, withHeaders(pdfPath, { range: 'bytes=4-' }));
     const body = new Uint8Array(await res.arrayBuffer());
 
@@ -349,19 +458,19 @@ describe('page caching', () => {
     const previous = process.env.NODE_ENV;
     process.env.NODE_ENV = 'production';
     try {
-      const english = (await renderPage('/cv', 'en')) as Response;
-      const russian = (await renderPage('/cv', 'ru')) as Response;
+      const english = (await renderPage('/resume', 'en')) as Response;
+      const russian = (await renderPage('/resume', 'ru')) as Response;
       const enTag = english.headers.get('etag') as string;
       const ruTag = russian.headers.get('etag') as string;
       expect(enTag).not.toBe(ruTag);
       const ruHtml = await russian.text();
-      const mismatch = (await renderPage('/cv', 'ru', withHeaders('/cv', { 'if-none-match': enTag }))) as Response;
+      const mismatch = (await renderPage('/resume', 'ru', withHeaders('/resume', { 'if-none-match': enTag }))) as Response;
       expect(mismatch.status).toBe(200);
       expect(await mismatch.text()).toBe(ruHtml);
-      const matching = (await renderPage('/cv', 'ru', withHeaders('/cv', { 'if-none-match': ruTag }))) as Response;
+      const matching = (await renderPage('/resume', 'ru', withHeaders('/resume', { 'if-none-match': ruTag }))) as Response;
       expect(matching.status).toBe(304);
       expect(await matching.text()).toBe('');
-      const head = (await renderPage('/cv', 'ru', withHeaders('/cv', {}, 'HEAD'))) as Response;
+      const head = (await renderPage('/resume', 'ru', withHeaders('/resume', {}, 'HEAD'))) as Response;
       expect(head.headers.get('etag')).toBe(ruTag);
       expect(head.headers.get('vary')).toBe('Cookie');
       expect(head.headers.get('cache-control')).toBe('no-cache');
@@ -374,7 +483,7 @@ describe('page caching', () => {
   });
 
   test('leaves dev responses uncached', async () => {
-    const res = await renderPage('/cv', 'en');
+    const res = await renderPage('/resume', 'en');
     expect(res as Response).not.toBeNull();
     expect((res as Response).headers.get('etag')).toBeNull();
   });
@@ -384,7 +493,7 @@ describe('page caching', () => {
     process.env.NODE_ENV = 'production';
 
     try {
-      const first = (await renderPage('/cv', 'en')) as Response;
+      const first = (await renderPage('/resume', 'en')) as Response;
       const etag = first.headers.get('etag') as string;
       const html = await first.text();
 
@@ -392,11 +501,11 @@ describe('page caching', () => {
       expect(first.headers.get('vary')).toBe('Cookie');
       expect(etag).toMatch(/^"[0-9a-f]+-[0-9a-f]+"$/);
 
-      const revalidated = (await renderPage('/cv', 'en', withHeaders('/cv', { 'if-none-match': etag }))) as Response;
+      const revalidated = (await renderPage('/resume', 'en', withHeaders('/resume', { 'if-none-match': etag }))) as Response;
       expect(revalidated.status).toBe(304);
       expect(revalidated.headers.get('etag')).toBe(etag);
 
-      const cached = (await renderPage('/cv', 'en')) as Response;
+      const cached = (await renderPage('/resume', 'en')) as Response;
       expect(cached.headers.get('etag')).toBe(etag);
       expect(await cached.text()).toBe(html);
     } finally {

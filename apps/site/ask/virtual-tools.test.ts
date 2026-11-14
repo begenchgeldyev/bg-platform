@@ -43,7 +43,7 @@ function controller(model: MockLanguageModelV4, listPublicProjects = async (): P
   return new AskController({
     model,
     rateLimiter: createRateLimiter({ limit: 20, windowMs: 60000 }),
-    loadCvText: async () => 'CV: Begench works at Synecta.',
+    loadResumeText: async () => 'Resume: Begench works at Synecta.',
     listPublicProjects,
   });
 }
@@ -202,7 +202,7 @@ describe('read-only virtual AI tools', () => {
 
   test('profile result clamp, missing repository, and abort wrapper fail closed', async () => {
     const abort = new AbortController();
-    const { tools } = createVirtualTools({ loadCvText: async () => 'x'.repeat(50000) }, abort.signal);
+    const { tools } = createVirtualTools({ loadResumeText: async () => 'x'.repeat(50000) }, abort.signal);
     const options = { toolCallId: 't', messages: [], context: {} };
     const profile = await tools.whoami.execute?.({}, options);
     expect(typeof profile).toBe('string');
@@ -229,7 +229,7 @@ describe('read-only virtual AI tools', () => {
       }));
       const { tools } = createVirtualTools(
         {
-          loadCvText: async () => 'CV',
+          loadResumeText: async () => 'Resume',
           listPublicProjects: async () => [
             { id: 99, isHidden: true, name: 'SECRET_HIDDEN' },
             { id: 100, name: 'SECRET_MISSING_VISIBILITY' },
@@ -297,12 +297,12 @@ describe('read-only virtual AI tools', () => {
     expect(model.doStreamCalls.length).toBe(0);
   });
 
-  test('CV load failure or cancellation is generic and never starts the provider', async () => {
+  test('Resume load failure or cancellation is generic and never starts the provider', async () => {
     const model = new MockLanguageModelV4({ doStream: [textStep()] });
     const deps = { model, rateLimiter: createRateLimiter({ limit: 10, windowMs: 60000 }) };
     const failing = new AskController({
       ...deps,
-      loadCvText: async () => {
+      loadResumeText: async () => {
         throw new Error('SECRET_PATH');
       },
     });
@@ -310,7 +310,7 @@ describe('read-only virtual AI tools', () => {
     expect(res.status).toBe(503);
     expect(await res.text()).not.toContain('SECRET');
     const abort = new AbortController();
-    const waiting = new AskController({ ...deps, loadCvText: () => new Promise(() => {}) });
+    const waiting = new AskController({ ...deps, loadResumeText: () => new Promise(() => {}) });
     const pending = waiting.handle(new Request(post(), { signal: abort.signal }), 'test');
     abort.abort();
     expect((await pending).status).toBe(503);

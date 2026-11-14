@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 
-const CV_FRAGMENT = join(import.meta.dir, '..', 'pages', 'cv.html');
+const RESUME_FRAGMENT = join(import.meta.dir, '..', 'pages', 'resume.html');
 
 const NAMED_ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
 
@@ -29,14 +29,14 @@ export function htmlToText(html: string): string {
 
 let cached: Promise<string> | undefined;
 
-async function readCvText() {
-  return htmlToText(await Bun.file(CV_FRAGMENT).text());
+async function readResumeText() {
+  return htmlToText(await Bun.file(RESUME_FRAGMENT).text());
 }
 
-export function loadCvText(): Promise<string> {
+export function loadResumeText(): Promise<string> {
   if (process.env.NODE_ENV !== 'production') {
-    return readCvText();
+    return readResumeText();
   }
-  cached ??= readCvText();
+  cached ??= readResumeText();
   return cached;
 }

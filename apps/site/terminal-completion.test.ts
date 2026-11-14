@@ -190,6 +190,28 @@ function createTerminal(assistant?: AskChat, lang = 'en') {
 }
 
 describe('terminal Tab completion', () => {
+  test('completes and opens resume while retaining the cv compatibility target', () => {
+    const terminal = createTerminal();
+    terminal.setLine('open re');
+    terminal.pressTab();
+    expect(terminal.input.value).toBe('open resume');
+    terminal.press('Enter');
+    terminal.setLine('open cv');
+    terminal.press('Enter');
+    expect(terminal.opened).toEqual(['/public/Begench-Geldyev-Resume.pdf', '/public/Begench-Geldyev-Resume.pdf']);
+  });
+
+  test('advertises resume in help and missing-target guidance', () => {
+    const terminal = createTerminal();
+    terminal.setLine('help');
+    terminal.press('Enter');
+    expect(terminal.appended()).toContain('open [github|linkedin|resume]');
+    expect(terminal.appended()).not.toContain('linkedin|cv');
+    terminal.setLine('open');
+    terminal.press('Enter');
+    expect(terminal.appended()).toContain('github | linkedin | resume');
+  });
+
   test('cat phi completes the visible line to cat philosophy.txt', () => {
     const terminal = createTerminal();
     terminal.setLine('cat phi');

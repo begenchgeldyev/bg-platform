@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { DEFAULT_LANG, isLang, localizedFragmentFile, resolveLang, t } from './i18n';
 
 function reqWithCookie(cookie?: string): Request {
-  return new Request('http://localhost/cv', {
+  return new Request('http://localhost/resume', {
     headers: cookie ? { cookie } : {},
   });
 }
@@ -55,21 +55,24 @@ describe('t', () => {
     expect(t('ru', 'navProjects')).toBe('Проекты');
   });
 
-  test('keeps the CV pdf label identical across languages', () => {
-    expect(t('ru', 'footerCvLink')).toBe(t('en', 'footerCvLink'));
+  test('translates resume navigation and download actions', () => {
+    expect(t('en', 'navResume')).toBe('Resume');
+    expect(t('ru', 'navResume')).toBe('Резюме');
+    expect(t('en', 'footerResumeLink')).toBe('Download resume');
+    expect(t('ru', 'footerResumeLink')).toBe('Скачать резюме');
   });
 });
 
 describe('localizedFragmentFile', () => {
   test('leaves the default language untouched', () => {
-    expect(localizedFragmentFile('cv.html', DEFAULT_LANG)).toBe('cv.html');
+    expect(localizedFragmentFile('resume.html', DEFAULT_LANG)).toBe('resume.html');
   });
 
   test('inserts the language before the extension', () => {
-    expect(localizedFragmentFile('cv.html', 'ru')).toBe('cv.ru.html');
+    expect(localizedFragmentFile('resume.html', 'ru')).toBe('resume.ru.html');
   });
 
   test('appends when there is no extension', () => {
-    expect(localizedFragmentFile('cv', 'ru')).toBe('cv.ru');
+    expect(localizedFragmentFile('resume', 'ru')).toBe('resume.ru');
   });
 });

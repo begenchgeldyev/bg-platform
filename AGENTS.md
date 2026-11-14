@@ -79,6 +79,8 @@ Cross-site and non-JSON guards are shared in `apps/site/http/requests.ts`; per-I
 
 Page fragments live in `apps/site/pages/`. Component partials (header, footer HTML) live in `apps/site/components/` but are currently superseded by the TypeScript `renderHeader()`/`renderFooter()` functions in `site.ts`.
 
+Resume is canonical at `/resume`, with `/public/Begench-Geldyev-Resume.pdf` as its download. Compatibility is intentional: `/cv` returns a bodyless 308 preserving the search string, the old decoded/encoded `Begench Geldyev(CV).pdf` filename aliases the same asset handler, and terminal `open cv` aliases `open resume`. Internal `cv-*`/`data-cv-*` skill-animation hooks remain unchanged to avoid unrelated styling churn. The Resume fragment includes `header.html` relative to the components directory; include template values provide bilingual heading/download labels.
+
 Frontend uses **HTMX** (no React/Vue). Styling uses **Tailwind CSS from CDN** with a Material Design 3 color palette extended in the inline `tailwind.config`. Fonts: **OpenTUI Mono** (self-hosted woff2 in `apps/site/public/fonts/`, declared via `@font-face` in `shared-head.html`) for everything, with **Noto Sans Mono** (Google Fonts) next in the stack because OpenTUI Mono has no Cyrillic glyphs — `shared-head.html` defines one `MONO_STACK` and maps all four Tailwind families (`headline`, `body`, `label`, `mono`) to it, so the whole site is monospace.
 
 ### Interaction conventions
@@ -91,7 +93,7 @@ The site runs **htmx 4**, so write htmx 4 syntax: colon-separated events (`htmx:
 
 ### AI assistant
 
-The home-page terminal sends ordinary messages directly to an OpenAI model through AI SDK 7 (`ai`, `@ai-sdk/openai`). `apps/site/ask/` is the server side: `AskController` (registered in `app-container.ts`, routed at `POST /api/ask`) grounds every answer in the CV text from `pages/cv.html`, refuses cross-site and non-JSON requests, validates the AI SDK UI messages, resends history as plain text, and rate-limits per client IP. `apps/site/client/` is the browser side (AI SDK `AbstractChat`); `server.ts` bundles it with `Bun.build` at startup and serves it from memory at `/assets/ask-chat.js`. Config: `OPENAI_API_KEY` (the feature is off without it), `OPENAI_MODEL` (default `gpt-6.1-sol-fast`), optional `OPENAI_BASE_URL`.
+The home-page terminal sends ordinary messages directly to an OpenAI model through AI SDK 7 (`ai`, `@ai-sdk/openai`). `apps/site/ask/` is the server side: `AskController` (registered in `app-container.ts`, routed at `POST /api/ask`) grounds every answer in the Resume text from `pages/resume.html`, refuses cross-site and non-JSON requests, validates the AI SDK UI messages, resends history as plain text, and rate-limits per client IP. `apps/site/client/` is the browser side (AI SDK `AbstractChat`); `server.ts` bundles it with `Bun.build` at startup and serves it from memory at `/assets/ask-chat.js`. Config: `OPENAI_API_KEY` (the feature is off without it), `OPENAI_MODEL` (default `gpt-6.1-sol-fast`), optional `OPENAI_BASE_URL`.
 
 ### Dependency injection
 

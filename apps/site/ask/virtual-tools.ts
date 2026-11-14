@@ -1,5 +1,5 @@
 import { jsonSchema, tool } from 'ai';
-import { htmlToText } from './cv-knowledge';
+import { htmlToText } from './resume-knowledge';
 
 export const TOOL_LIMITS = { calls: 4, resultChars: 6000, rows: 5, queryChars: 80 } as const;
 
@@ -14,7 +14,7 @@ const FILES = {
 };
 
 export type VirtualToolDeps = {
-  loadCvText: () => Promise<string>;
+  loadResumeText: () => Promise<string>;
   listPublicProjects?: () => Promise<unknown[]>;
 };
 
@@ -59,7 +59,7 @@ export function plainBounded(value: unknown, maxChars: number): string {
   return typeof value === 'string' ? htmlToText(value.slice(0, 20000)).slice(0, maxChars) : '';
 }
 
-// Stop waiting on a repository/CV callback when the request ends. The repository
+// Stop waiting on a repository/Resume callback when the request ends. The repository
 // interface itself has no cancellation API; its eventual result is never exposed.
 export function withAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -94,9 +94,9 @@ export function createVirtualTools(deps: VirtualToolDeps, signal: AbortSignal) {
     },
     tools: {
       whoami: tool({
-        description: 'Read Begench’s public CV/profile. Read-only virtual site command, never a shell.',
+        description: 'Read Begench’s public Resume/profile. Read-only virtual site command, never a shell.',
         inputSchema: inputSchema('empty'),
-        execute: wrap('empty', async () => plainBounded(await deps.loadCvText(), TOOL_LIMITS.resultChars)),
+        execute: wrap('empty', async () => plainBounded(await deps.loadResumeText(), TOOL_LIMITS.resultChars)),
       }),
       ls: tool({
         description: 'List the readable virtual site filenames.',
