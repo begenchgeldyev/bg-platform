@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { createSessionToken, OWNER_EMAIL } from '../auth/session';
-import { resolveEmail } from './pep';
+import { createSessionToken, OWNER_EMAIL, resolveEmail } from '../index';
 
 process.env.ADMIN_SECRET = 'test-secret';
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { createSessionToken, isValidSessionToken, OWNER_EMAIL, SESSION_MAX_AGE_SECONDS, sessionEmail } from './session';
+import { createSessionToken, isValidSessionToken, OWNER_EMAIL, SESSION_MAX_AGE_SECONDS, sessionEmail } from '../index';
 
 function requestWithCookie(cookie: string): Request {
   return new Request('http://localhost/admin', { headers: { cookie } });
