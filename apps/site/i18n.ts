@@ -25,8 +25,8 @@ export function resolveLang(req: Request): Lang {
 const EN = {
   navProjects: 'Projects',
   navLogs: 'Logs',
-  navCv: 'CV',
-  footerCvLink: 'CV.pdf',
+  navResume: 'Resume',
+  footerResumeLink: 'Download resume',
   visibilityHidden: 'Hidden',
   visibilityPublished: 'Published',
   projectNoDescription: 'No short description provided.',
@@ -43,8 +43,8 @@ const STRINGS: Record<Lang, Record<StringKey, string>> = {
   ru: {
     navProjects: 'Проекты',
     navLogs: 'Логи',
-    navCv: 'Резюме',
-    footerCvLink: 'CV.pdf',
+    navResume: 'Резюме',
+    footerResumeLink: 'Скачать резюме',
     visibilityHidden: 'Скрыт',
     visibilityPublished: 'Опубликован',
     projectNoDescription: 'Краткое описание не указано.',

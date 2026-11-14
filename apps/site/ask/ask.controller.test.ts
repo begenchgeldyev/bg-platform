@@ -33,7 +33,7 @@ function controller({ model = mockModel(), limit = 10 }: { model?: MockLanguageM
   return new AskController({
     model,
     rateLimiter: createRateLimiter({ limit, windowMs: 60_000 }),
-    loadCvText: async () => 'Fullstack Developer at Synecta, Tomsk.',
+    loadResumeText: async () => 'Fullstack Developer at Synecta, Tomsk.',
   });
 }
 
@@ -67,7 +67,7 @@ describe('AskController', () => {
     expect(await streamedText(res)).toBe('Begench builds web apps.');
   });
 
-  test('grounds the model in the CV and passes earlier turns', async () => {
+  test('grounds the model in the Resume and passes earlier turns', async () => {
     const model = mockModel();
     const history: UIMessage[] = [
       message('user', 'Where does Begench work?'),

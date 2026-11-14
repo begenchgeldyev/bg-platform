@@ -6,6 +6,10 @@ The vocabulary of `begenchgeldyev`: a personal portfolio site whose project cata
 
 ### Product
 
+**Resume**:
+The owner's professional summary for prospective employers, presented as a web page and a downloadable PDF. Both are formats of the same summary. Russian: «Резюме».
+_Avoid_: CV, curriculum vitae
+
 **Project**:
 One entry in the portfolio catalog: a name, and optionally a description, a body, an image, an icon and tags. Only the name is required.
 _Avoid_: entry, portfolio entry, work, works, item
@@ -77,5 +81,5 @@ The `whoami`, `ls`, `cat` and `projects` commands the assistant may run. They re
 _Avoid_: shell, sandbox, tool calls, commands
 
 **Grounding**:
-The CV page's text, plus the read-only virtual site lookups the assistant may make. Nothing comes from an index and nothing is fetched from the web.
+The Resume page's text, plus the read-only virtual site lookups the assistant may make. Nothing comes from an index and nothing is fetched from the web.
 _Avoid_: knowledge base, RAG, index, training data, embeddings

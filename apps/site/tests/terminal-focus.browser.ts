@@ -36,7 +36,7 @@ try {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => document.fonts.ready);
     const input = page.locator('#terminal-input');
-    const headerLink = page.locator('header a[href="/cv"]');
+    const headerLink = page.locator('header a[href="/resume"]');
     const loaded = await page.evaluate(() => ({
       focused: document.activeElement === document.getElementById('terminal-input'),
       pointerFine: matchMedia('(pointer: fine)').matches,
@@ -119,7 +119,7 @@ try {
     console.log(`PASS terminal clicks return to the prompt unless text is selected ${lang}`);
 
     // 1b. A history return re-runs the component, so the prompt takes focus again.
-    await page.goto('/cv', { waitUntil: 'domcontentloaded' });
+    await page.goto('/resume', { waitUntil: 'domcontentloaded' });
     await page.goBack({ waitUntil: 'domcontentloaded' });
     await page.evaluate(() => document.fonts.ready);
     assert.equal(await input.evaluate(inputIsActive), true, 'back navigation focuses the prompt again');

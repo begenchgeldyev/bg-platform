@@ -25,7 +25,7 @@ export const ASK_LIMITS = {
 type AskControllerDeps = VirtualToolDeps & {
   model: LanguageModel | null;
   rateLimiter: RateLimiter;
-  loadCvText: () => Promise<string>;
+  loadResumeText: () => Promise<string>;
 };
 
 function messageText(message: UIMessage) {
@@ -68,7 +68,7 @@ export class AskController {
   constructor(private readonly deps: AskControllerDeps) {}
 
   async handle(req: Request, clientIp: string): Promise<Response> {
-    const { model, rateLimiter, loadCvText } = this.deps;
+    const { model, rateLimiter, loadResumeText } = this.deps;
     if (!model) {
       return errorResponse(503, 'assistant is offline');
     }
@@ -111,16 +111,16 @@ export class AskController {
     }
 
     const signal = AbortSignal.any([req.signal, AbortSignal.timeout(ASK_LIMITS.timeoutMs)]);
-    let cvText: string;
+    let resumeText: string;
     try {
-      cvText = plainBounded(await withAbort(loadCvText(), signal), 12000);
+      resumeText = plainBounded(await withAbort(loadResumeText(), signal), 12000);
     } catch {
       return errorResponse(503, 'assistant is unavailable');
     }
-    const virtual = createVirtualTools({ ...this.deps, loadCvText: async () => cvText }, signal);
+    const virtual = createVirtualTools({ ...this.deps, loadResumeText: async () => resumeText }, signal);
     const result = streamText({
       model,
-      instructions: buildInstructions(cvText),
+      instructions: buildInstructions(resumeText),
       messages: await convertToModelMessages(toPlainTextMessages(messages)),
       maxOutputTokens: ASK_LIMITS.maxOutputTokens,
       tools: virtual.tools,

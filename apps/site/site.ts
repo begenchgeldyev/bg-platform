@@ -2,7 +2,7 @@ import { stat } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
 import { type Lang, localizedFragmentFile, resolveLang, t } from './i18n';
 
-type NavKey = 'projects' | 'logs' | 'cv';
+type NavKey = 'projects' | 'logs' | 'resume';
 type FooterVariant = 'default' | 'home';
 
 type LayoutConfig = {
@@ -10,7 +10,7 @@ type LayoutConfig = {
   activeNav?: NavKey;
   brandIsLink?: boolean;
   footerVariant?: FooterVariant;
-  includeCvLink?: boolean;
+  includeResumeLink?: boolean;
   selectionTextClass?: string;
   showTerminalIcon?: boolean;
   pageTransitions?: boolean;
@@ -180,16 +180,16 @@ const PAGE_CONFIGS: Record<string, PageConfig> = {
     fragmentFile: 'index.html',
     brandIsLink: false,
     footerVariant: 'home',
-    includeCvLink: true,
+    includeResumeLink: true,
     selectionTextClass: 'selection:text-on-primary-fixed',
   },
-  '/cv': {
-    title: { en: 'CV — BEGENCH_GELDYEV@ROOT:~$', ru: 'РЕЗЮМЕ — BEGENCH_GELDYEV@ROOT:~$' },
-    fragmentFile: 'cv.html',
-    activeNav: 'cv',
+  '/resume': {
+    title: { en: 'Resume — BEGENCH_GELDYEV@ROOT:~$', ru: 'Резюме — BEGENCH_GELDYEV@ROOT:~$' },
+    fragmentFile: 'resume.html',
+    activeNav: 'resume',
     brandIsLink: true,
     footerVariant: 'default',
-    includeCvLink: true,
+    includeResumeLink: true,
     showTerminalIcon: true,
   },
   '/logs': {
@@ -289,7 +289,7 @@ async function renderHeader(config: LayoutConfig, lang: Lang) {
     navLinks: [
       renderNavLink(config.activeNav, '/projects', t(lang, 'navProjects'), 'projects'),
       renderNavLink(config.activeNav, '/logs', t(lang, 'navLogs'), 'logs'),
-      renderNavLink(config.activeNav, '/cv', t(lang, 'navCv'), 'cv'),
+      renderNavLink(config.activeNav, '/resume', t(lang, 'navResume'), 'resume'),
     ].join(''),
     terminal,
   });
@@ -297,14 +297,14 @@ async function renderHeader(config: LayoutConfig, lang: Lang) {
 
 async function renderFooter(config: LayoutConfig, lang: Lang) {
   if (config.footerVariant === 'home') {
-    return renderComponentTemplate('footer-home.html');
+    return renderComponentTemplate('footer-home.html', { footerResumeLink: t(lang, 'footerResumeLink') });
   }
 
-  const cvLink = config.includeCvLink
-    ? `<a class="font-mono text-xs tracking-widest text-primary-container underline font-bold uppercase" href="/public/Begench%20Geldyev(CV).pdf" target="_blank">${t(lang, 'footerCvLink')}</a>`
+  const resumeLink = config.includeResumeLink
+    ? `<a class="font-mono text-xs tracking-widest text-primary-container underline font-bold uppercase" href="/public/Begench-Geldyev-Resume.pdf" target="_blank">${t(lang, 'footerResumeLink')}</a>`
     : '';
 
-  return renderComponentTemplate('footer-default.html', { cvLink });
+  return renderComponentTemplate('footer-default.html', { resumeLink });
 }
 
 async function renderLayout(config: LayoutConfig, content: string, lang: Lang) {
@@ -344,19 +344,25 @@ export async function renderDynamicPage(req: Request, { page, title, contentHtml
   return new Response(html, { headers });
 }
 
-async function resolveIncludes(html: string): Promise<string> {
+async function resolveIncludes(html: string, values: Record<string, string>): Promise<string> {
   const includeRe = /<!--#include\s+(.+?)\s*-->/g;
   const matches = [...html.matchAll(includeRe)];
   for (const match of matches) {
     const componentPath = join(COMPONENTS_DIR, match[1].trim());
     const file = Bun.file(componentPath);
     const content = (await file.exists()) ? await file.text() : `<!-- missing: ${match[1].trim()} -->`;
-    html = html.replace(match[0], () => content);
+    html = html.replace(match[0], () => fillTemplate(content, values));
   }
   return html;
 }
 
 export async function renderPage(pathname: string, lang: Lang, req?: Request): Promise<Response | null> {
+  // Legacy links must redirect before conditional page revalidation can return 304.
+  if (pathname === '/cv') {
+    const search = req ? new URL(req.url).search : '';
+    return new Response(null, { status: 308, headers: { Location: `/resume${search}` } });
+  }
+
   const config = PAGE_CONFIGS[pathname];
   if (!config) {
     return null;
@@ -377,11 +383,19 @@ export async function renderPage(pathname: string, lang: Lang, req?: Request): P
     return new Response('Not Found', { status: 404 });
   }
 
-  const content = await resolveIncludes(await fragment.text());
+  const content = await resolveIncludes(await fragment.text(), {
+    resumeBadge: `[${t(lang, 'navResume')}]`,
+    downloadResume: t(lang, 'footerResumeLink'),
+  });
   const html = await renderLayout(config, content, lang);
 
   if (!cacheable) {
-    return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+    const headers = new Headers({ 'Content-Type': 'text/html; charset=utf-8' });
+    if (req?.method === 'HEAD') {
+      headers.set('Content-Length', String(Buffer.byteLength(html)));
+      return new Response(null, { headers });
+    }
+    return new Response(html, { headers });
   }
 
   const etag = pageEtag(html);
@@ -396,6 +410,11 @@ export async function servePublicAsset(pathname: string, req?: Request): Promise
     relativePath = decodeURIComponent(pathname.slice('/public/'.length));
   } catch {
     return new Response('Bad Request', { status: 400 });
+  }
+
+  // Decode first so encoded and decoded legacy filenames share all asset semantics.
+  if (relativePath === 'Begench Geldyev(CV).pdf') {
+    relativePath = 'Begench-Geldyev-Resume.pdf';
   }
 
   const assetPath = normalize(join(PUBLIC_DIR, relativePath));

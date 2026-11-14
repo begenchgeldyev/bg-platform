@@ -82,7 +82,9 @@
   const LINKS = {
     github: 'https://github.com/begenchgeldyev',
     linkedin: 'https://linkedin.com/in/begench-geldyev',
-    cv: '/public/Begench%20Geldyev(CV).pdf',
+    resume: '/public/Begench-Geldyev-Resume.pdf',
+    // Compatibility alias; keep it in the shared table for matching completion.
+    cv: '/public/Begench-Geldyev-Resume.pdf',
   };
 
   function escapeText(value) {
@@ -160,7 +162,7 @@
         row('uptime', 'system uptime') +
         row('projects', 'go to projects') +
         row('logs', 'go to logs') +
-        row('open [github|linkedin|cv]', 'open link') +
+        row('open [github|linkedin|resume]', 'open link') +
         row('clear', 'clear terminal') +
         `</div>`
       );
@@ -214,7 +216,7 @@
 
     open(args) {
       const target = args[0];
-      if (!target) return err('open: specify target — github | linkedin | cv');
+      if (!target) return err('open: specify target — github | linkedin | resume');
       if (!Object.hasOwn(LINKS, target)) return err(`open: unknown target '${target}'`);
       window.open(LINKS[target], '_blank');
       return `<span class="text-primary-container/70 pl-2">Opening ${target}...</span>`;

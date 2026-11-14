@@ -83,9 +83,9 @@ try {
         if (message.type() === 'error') consoleErrors.push({ text: message.text(), url: message.location().url });
       });
       await page.goto('/');
-      await page.locator('header a[href="/cv"]').focus();
+      await page.locator('header a[href="/resume"]').focus();
       await page.keyboard.press('Enter');
-      await page.waitForURL('**/cv');
+      await page.waitForURL('**/resume');
       await page.waitForFunction(() => window.transitionEvidence?.finished);
       const evidence = await page.evaluate(() => window.transitionEvidence);
       assert.equal(evidence.native, true);
@@ -120,7 +120,7 @@ try {
       await page.locator('header a[href="/logs"]').click();
       await page.waitForURL('**/logs');
       await page.goBack();
-      await page.waitForURL('**/cv');
+      await page.waitForURL('**/resume');
       await page.goForward();
       await page.waitForURL('**/logs');
       await page.locator('header a[href="/"]').click();
@@ -153,7 +153,7 @@ try {
       await frames.addInitScript(observeTransitions, true);
       const framePage = await frames.newPage();
       await framePage.goto('/');
-      await framePage.locator('header a[href="/cv"]').click();
+      await framePage.locator('header a[href="/resume"]').click();
       await framePage.waitForFunction(() => window.transitionEvidence?.ready);
       for (const time of [0, 70, 160]) {
         await framePage.evaluate((time: number) => {
@@ -171,8 +171,8 @@ try {
   await reduced.addInitScript(observeTransitions, false);
   const page = await reduced.newPage();
   await page.goto('/');
-  await page.locator('header a[href="/cv"]').click();
-  await page.waitForURL('**/cv');
+  await page.locator('header a[href="/resume"]').click();
+  await page.waitForURL('**/resume');
   await page.waitForFunction(() => Boolean(window.transitionEvidence));
   assert.equal(await page.evaluate(() => window.transitionEvidence.native), false);
   assert.equal(await page.locator('main').evaluate((main: Element) => getComputedStyle(main).viewTransitionName), 'none');
@@ -195,7 +195,7 @@ try {
   await links.locator('main a[href="/projects"]').click();
   await links.waitForURL('**/projects');
   assert.equal(await links.locator('main').count(), 1);
-  await links.goto('/cv');
+  await links.goto('/resume');
   const documentId = await links.evaluate(() => {
     document.documentElement.dataset.documentId = 'original';
     return location.href;
@@ -244,8 +244,8 @@ try {
   await links.waitForURL('**/logs?');
   await links.goto('/admin');
   assert.equal(await links.locator('main').evaluate((main: Element) => getComputedStyle(main).viewTransitionName), 'none');
-  await links.locator('header a[href="/cv"]').click();
-  await links.waitForURL('**/cv');
+  await links.locator('header a[href="/resume"]').click();
+  await links.waitForURL('**/resume');
   await links.waitForFunction(() => Boolean(window.transitionEvidence));
   assert.equal(await links.evaluate(() => window.transitionEvidence.native), false, 'admin does not opt into transitions');
   await ordinary.close();
@@ -272,8 +272,8 @@ try {
     await fallback.addInitScript(observeTransitions, false);
     const page = await fallback.newPage();
     await page.goto('/');
-    await page.locator('header a[href="/cv"]').click();
-    await page.waitForURL('**/cv');
+    await page.locator('header a[href="/resume"]').click();
+    await page.waitForURL('**/resume');
     assert.equal(await page.locator('main').count(), 1);
     // `pagereveal` may land after the document commits; wait for the recorded evidence instead of racing it.
     await page.waitForFunction(() => Boolean(window.transitionEvidence));

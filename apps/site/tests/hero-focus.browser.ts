@@ -79,7 +79,7 @@ try {
       await page.waitForFunction(() => document.querySelector('[data-role-label]')?.textContent === 'Software Engineer');
       await page.keyboard.press('Space');
       await page.waitForFunction(() => document.querySelector('[data-role-label]')?.textContent === 'AI Engineer');
-      for (const selector of ['header a[href="/cv"]', '[data-terminal-fullscreen]']) {
+      for (const selector of ['header a[href="/resume"]', '[data-terminal-fullscreen]']) {
         const control = page.locator(selector);
         await control.focus();
         assert.deepEqual(

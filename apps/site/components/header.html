@@ -1,20 +1,20 @@
 <header class="mb-16 flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-outline-variant pb-8">
-	<div>
-		<div class="flex items-center gap-3 mb-4">
-			<span
-				class="font-mono text-primary-container text-xs bg-primary-container/10 px-3 py-1 border border-primary-container/30 uppercase tracking-widest">
-				[CURRICULUM VITAE]
-			</span>
-		</div>
-		<h1 class="text-5xl md:text-6xl font-headline font-bold uppercase tracking-tighter text-white">Begench Geldyev</h1>
-		<p class="text-on-surface-variant font-mono text-sm mt-3">Software Engineer · Web Developer · Vim Enjoyer</p>
-	</div>
-	<a
-		href="/public/Begench%20Geldyev(CV).pdf"
-		download
-		target="_blank"
-		class="flex items-center gap-2 px-6 py-3 border border-outline text-white font-mono text-xs uppercase hover:border-primary-container hover:text-primary-container transition-all self-end shrink-0">
-		<span class="material-symbols-outlined text-sm">download</span>
-		Download PDF
-	</a>
+  <div>
+    <div class="flex items-center gap-3 mb-4">
+      <span
+        class="font-mono text-primary-container text-xs bg-primary-container/10 px-3 py-1 border border-primary-container/30 uppercase tracking-widest">
+        {{ resumeBadge }}
+      </span>
+    </div>
+    <h1 class="text-5xl md:text-6xl font-headline font-bold uppercase tracking-tighter text-white">Begench Geldyev</h1>
+    <p class="text-on-surface-variant font-mono text-sm mt-3">Software Engineer · Web Developer · Vim Enjoyer</p>
+  </div>
+  <a
+    href="/public/Begench-Geldyev-Resume.pdf"
+    download
+    target="_blank"
+    class="flex items-center gap-2 px-6 py-3 border border-outline text-white font-mono text-xs uppercase hover:border-primary-container hover:text-primary-container transition-all self-end shrink-0">
+    <span class="material-symbols-outlined text-sm">download</span>
+    {{ downloadResume }}
+  </a>
 </header>

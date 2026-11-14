@@ -122,10 +122,10 @@ let aiRequests = 0;
 try {
   const configurations = ['en', 'ru'].flatMap((lang) =>
     [1440, 390].flatMap((width) =>
-      ['/cv', '/logs', '/projects'].flatMap((route) => [false, true].map((reduced) => ({ lang, width, route, reduced, cold: false }))),
+      ['/resume', '/logs', '/projects'].flatMap((route) => [false, true].map((reduced) => ({ lang, width, route, reduced, cold: false }))),
     ),
   );
-  configurations.push({ lang: 'en', width: 1440, route: '/cv', reduced: false, cold: true });
+  configurations.push({ lang: 'en', width: 1440, route: '/resume', reduced: false, cold: true });
   const cases = process.env.RETURN_HOME_SINGLE ? configurations.slice(0, 1) : configurations;
   for (const config of cases) {
     const name = `${config.route.slice(1)}-${config.lang}-${config.width}-${config.reduced ? 'reduced' : 'motion'}-${config.cold ? 'cold' : 'warm'}`;

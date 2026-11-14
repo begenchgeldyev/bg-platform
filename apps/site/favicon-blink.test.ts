@@ -185,7 +185,7 @@ describe('site icon shared head and no-JavaScript fallback', () => {
 
   test('includes the same contract on public pages in both languages and admin', async () => {
     for (const language of ['en', 'ru'] as const) {
-      const response = await renderPage('/cv', language);
+      const response = await renderPage('/resume', language);
       expect(response?.status).toBe(200);
       checkHead(await (response as Response).text());
     }

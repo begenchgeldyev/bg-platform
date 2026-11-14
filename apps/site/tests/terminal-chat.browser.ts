@@ -284,7 +284,7 @@ try {
   await input.fill('Let me read the earlier reply');
   await input.press('Enter');
   await page.waitForFunction(() => window.terminalMock.requests.length === 2);
-  await page.locator('header a[href="/cv"]').focus();
+  await page.locator('header a[href="/resume"]').focus();
   await page.evaluate(() => {
     const body = document.getElementById('terminal-body') as HTMLElement;
     body.scrollTop = 0;
@@ -310,7 +310,7 @@ try {
     })),
     before,
   );
-  assert.equal(await page.locator('header a[href="/cv"]').evaluate((element: Element) => document.activeElement === element), true);
+  assert.equal(await page.locator('header a[href="/resume"]').evaluate((element: Element) => document.activeElement === element), true);
   // A live selection outranks click-to-focus; clearing it hands the prompt back.
   await page.evaluate(() => getSelection()?.removeAllRanges());
   await page

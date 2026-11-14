@@ -35,7 +35,7 @@ function chatAgainstServer(limit: number, chatModel = model): AskChat {
   const controller = new AskController({
     model: chatModel,
     rateLimiter: createRateLimiter({ limit, windowMs: 60_000 }),
-    loadCvText: async () => 'CV',
+    loadResumeText: async () => 'Resume',
   });
   const server = Bun.serve({ port: 0, routes: { '/api/ask': { POST: (req) => controller.handle(req, 'test') } } });
   servers.push(server);
