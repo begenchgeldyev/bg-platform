@@ -1,9 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import type { ProjectsRepository } from '@bg/core';
+import type { Project } from '@bg/core';
 import { PROJECT_LIMITS } from '../project/project-input';
 import { AdminController } from './admin.controller';
-
-type Project = Awaited<ReturnType<ProjectsRepository['list']>>[number];
 
 function project(overrides: Partial<Project> = {}): Project {
   return {
@@ -32,9 +30,8 @@ class FakeProjectsRepository {
 function createController(options: { projects?: Project[]; email?: string | null; canEdit?: boolean }) {
   const repository = new FakeProjectsRepository(options.projects ?? []);
   return new AdminController({
-    projectsRepository: repository as unknown as ProjectsRepository,
-    canEditProjects: async () => options.canEdit ?? false,
-    sessionEmail: () => options.email ?? null,
+    projectsRepository: repository,
+    projectAccess: async () => (!options.email ? 'visitor' : options.canEdit ? 'editor' : 'read-only'),
   });
 }
 
@@ -47,6 +44,59 @@ function scriptSection(html: string, start: string, end: string): string {
 }
 
 describe('AdminController', () => {
+  test.each(['visitor', 'read-only', 'editor'] as const)('applies the admin document policy and HEAD behavior to %s', async (access) => {
+    const controller = new AdminController({
+      projectsRepository: new FakeProjectsRepository([project()]),
+      projectAccess: async () => access,
+    });
+    const response = await controller.page(new Request('http://localhost/admin', { headers: { cookie: 'lang=ru' } }));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8');
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('x-robots-tag')).toBe('noindex');
+    expect(response.headers.get('etag')).toBeNull();
+    const html = await response.text();
+    expect(html).toContain('<html class="dark" lang="en">');
+    expect(html).toContain('>Projects<');
+    expect(html).toContain('<title>ADMIN — BEGENCH_GELDYEV@ROOT:~$</title>');
+    expect(html).not.toContain('type="speculationrules"');
+    expect(html).not.toContain('@view-transition');
+    expect(html).toContain(
+      access === 'visitor' ? 'data-admin-login' : access === 'read-only' ? "can't edit projects yet" : 'data-admin-app',
+    );
+    const head = await controller.page(
+      new Request('http://localhost/admin', {
+        method: 'HEAD',
+        headers: { cookie: 'lang=ru', 'if-none-match': '*' },
+      }),
+    );
+    expect(head.status).toBe(200);
+    expect(head.headers.get('cache-control')).toBe('no-store');
+    expect(head.headers.get('x-robots-tag')).toBe('noindex');
+    expect(head.headers.get('content-length')).toBe(String(Buffer.byteLength(html)));
+    expect(await head.text()).toBe('');
+  });
+
+  test('uses one project-access decision, without reading projects for visitor or read-only sessions', async () => {
+    for (const access of ['visitor', 'read-only', 'editor'] as const) {
+      const calls: string[] = [];
+      const controller = new AdminController({
+        projectsRepository: {
+          async list() {
+            calls.push('list');
+            return [];
+          },
+        },
+        async projectAccess() {
+          calls.push('access');
+          return access;
+        },
+      });
+      await controller.page(new Request('http://localhost/admin'));
+      expect(calls).toEqual(access === 'editor' ? ['access', 'list'] : ['access']);
+    }
+  });
+
   test('shows the login form without a session', async () => {
     const controller = createController({
       projects: [project({ name: 'Secret Plan' })],
@@ -107,20 +157,6 @@ describe('AdminController', () => {
     const response = await controller.page(new Request('http://localhost/admin'));
     const html = await response.text();
     expect(html).not.toContain('</script><img');
-  });
-
-  test('button actions keep mousedown and add click for keyboard and assistive activation', async () => {
-    const controller = createController({
-      projects: [project({ name: 'Demo' })],
-      email: 'begenchgeldyev@gmail.com',
-      canEdit: true,
-    });
-    const html = await (await controller.page(new Request('http://localhost/admin'))).text();
-    const onAction = scriptSection(html, 'function onAction', 'const projectsDataEl');
-
-    expect(onAction).toContain("addEventListener('mousedown'");
-    expect(onAction).toContain("addEventListener('click'");
-    expect(onAction).not.toContain("addEventListener('keydown'");
   });
 
   test('the login button also answers keyboard and assistive clicks', async () => {

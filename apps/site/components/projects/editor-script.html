@@ -1,287 +1,263 @@
-<script data-project-mode="{{projectMode}}" data-empty-content-html="{{emptyContentHtmlAttr}}">
-const currentScript = document.currentScript;
-const project = JSON.parse(currentScript.dataset.projectMode);
-const emptyContentHtml = currentScript.dataset.emptyContentHtml;
+<script src="/public/project-edits.js"></script>
+<script data-project-mode="{{projectMode}}" data-project-limits="{{projectLimits}}" data-empty-content-html="{{emptyContentHtmlAttr}}">
+(() => {
+  const currentScript = document.currentScript;
+  let project = JSON.parse(currentScript.dataset.projectMode);
+  const edits = createProjectEdits({ project, limits: JSON.parse(currentScript.dataset.projectLimits) });
+  const emptyContentHtml = currentScript.dataset.emptyContentHtml;
 
-function escapeHtml(value) {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
-
-function insertHtml(html) {
-  document.execCommand('insertHTML', false, html);
-}
-
-/**
- * Manages the state and interactions of the project.
- * @typedef {'idle' | 'editing' | 'saving'} EditorState
- */
-
-class EditorStateMachine {
-  #state = 'idle'; // 'idle' | 'editing' | 'saving'
-  #snapshot = null;
-  #activeEditable = null;
-
-  #editor;
-  #status;
-  #adminStatus;
-  #uploadInput;
-  #uploadTrigger;
-  #visibilityToggle;
-  #titleNode;
-  #descriptionNode;
-  #contentNode;
-  #previewNode;
-  #visibilityNode;
-  #editableNodes;
-
-  constructor() {
-    this.#editor = document.getElementById('project-editor');
-    this.#status = document.getElementById('project-editor-status');
-    this.#adminStatus = document.getElementById('project-admin-status');
-    this.#uploadInput = document.getElementById('project-upload-input');
-    this.#uploadTrigger = document.getElementById('project-upload-trigger');
-    this.#visibilityToggle = document.getElementById('project-visibility-toggle');
-    this.#titleNode = document.querySelector("[data-project-field='name']");
-    this.#descriptionNode = document.querySelector("[data-project-field='description']");
-    this.#contentNode = document.querySelector("[data-project-field='content']");
-    this.#previewNode = document.querySelector('[data-project-preview]');
-    this.#visibilityNode = document.querySelector('[data-project-visibility]');
-    this.#editableNodes = [this.#titleNode, this.#descriptionNode, this.#contentNode].filter(Boolean);
-
-    this.#editableNodes.forEach((node) => {
-      node.addEventListener('dblclick', (e) => this.open(e.target.closest('[data-project-field]')));
-      node.addEventListener('focus', () => {
-        this.#activeEditable = node;
-      });
-      node.addEventListener('click', () => {
-        this.#activeEditable = node;
-      });
-      node.addEventListener('keydown', (e) => this.#onKeyDown(e));
+  function onAction(node, handler) {
+    node?.addEventListener('mousedown', (event) => {
+      if (event.button === 0) {
+        event.preventDefault();
+        handler();
+      }
     });
-
-    this.#uploadTrigger?.addEventListener('click', () => this.#uploadInput?.click());
-    this.#uploadInput?.addEventListener('change', (event) => this.#onUploadChange(event));
-    this.#visibilityToggle?.addEventListener('click', () => this.#toggleVisibility());
-
-    this.#applyViewState();
-    this.#normalizeContent();
-    this.#setEditable(false);
-  }
-
-  open(triggerNode) {
-    if (this.#state !== 'idle' || !triggerNode) return;
-    this.#enterEditing(triggerNode);
-  }
-
-  #enterEditing(triggerNode) {
-    this.#takeSnapshot();
-    this.#state = 'editing';
-    this.#activeEditable = triggerNode;
-    this.#setEditable(true);
-    if (this.#status) {
-      this.#status.textContent = 'Inline editing unlocked.';
-    }
-
-    window.setTimeout(() => {
-      triggerNode?.focus();
-    }, 0);
-  }
-
-  #enterIdle() {
-    if (this.#state === 'idle') return;
-    this.#restoreSnapshot();
-    this.#normalizeContent();
-    this.#setEditable(false);
-    this.#state = 'idle';
-    if (this.#status) {
-      this.#status.textContent = '';
-    }
-    this.#snapshot = null;
-    this.#activeEditable = null;
-  }
-
-  async #enterSaving() {
-    if (this.#state !== 'editing') return;
-    this.#state = 'saving';
-    this.#setStatus('Saving…');
-
-    const response = await this.#saveProject();
-    if (!response.ok) return;
-
-    this.#state = 'idle';
-    window.location.reload();
-  }
-
-  #setEditable(enabled) {
-    this.#editableNodes.forEach((node) => {
-      const isActive = enabled && node === this.#activeEditable;
-      node.contentEditable = isActive ? 'true' : 'false';
-      node.dataset.editing = isActive ? 'true' : 'false';
-      node.classList.toggle('ring-1', isActive);
-      node.classList.toggle('ring-primary-container', isActive);
-      node.classList.toggle('ring-inset', isActive);
-      node.classList.toggle('bg-primary-container/5', isActive);
-      node.classList.toggle('px-3', isActive);
-      node.classList.toggle('py-2', isActive);
-      node.classList.toggle('cursor-text', isActive);
-      node.classList.toggle('cursor-pointer', !isActive);
+    node?.addEventListener('click', (event) => {
+      if (event.detail === 0) handler();
     });
   }
 
-  #takeSnapshot() {
-    this.#snapshot = {
-      name: this.#titleNode.textContent,
-      description: this.#descriptionNode.textContent,
-      content: this.#contentNode.innerHTML,
-      image: project.image,
-      isHidden: Boolean(project.isHidden),
-    };
+  function insertHtml(html) {
+    document.execCommand('insertHTML', false, html);
   }
 
-  #restoreSnapshot() {
-    if (!this.#snapshot) return;
-    project.name = this.#snapshot.name ?? '';
-    project.description = this.#snapshot.description ?? '';
-    project.content = this.#snapshot.content ?? '';
-    project.image = this.#snapshot.image ?? '';
-    project.isHidden = Boolean(this.#snapshot.isHidden);
-    this.#applyViewState();
-  }
+  /**
+   * Manages the state and interactions of the project.
+   * @typedef {'idle' | 'editing' | 'saving'} EditorState
+   */
 
-  #applyViewState() {
-    this.#titleNode.textContent = project.name ?? '';
-    this.#descriptionNode.textContent = project.description ?? '';
-    this.#contentNode.innerHTML = project.content && project.content.trim().length > 0 ? project.content : emptyContentHtml;
-    if (this.#visibilityNode) {
-      this.#visibilityNode.textContent = project.isHidden ? 'Hidden' : 'Published';
+  class EditorStateMachine {
+    #state = 'idle'; // 'idle' | 'editing' | 'saving'
+    #snapshot = null;
+    #activeEditable = null;
+
+    #status;
+    #adminStatus;
+    #uploadInput;
+    #uploadTrigger;
+    #visibilityToggle;
+    #titleNode;
+    #descriptionNode;
+    #contentNode;
+    #previewNode;
+    #visibilityNode;
+    #editableNodes;
+
+    constructor() {
+      this.#status = document.getElementById('project-editor-status');
+      this.#adminStatus = document.getElementById('project-admin-status');
+      this.#uploadInput = document.getElementById('project-upload-input');
+      this.#uploadTrigger = document.getElementById('project-upload-trigger');
+      this.#visibilityToggle = document.getElementById('project-visibility-toggle');
+      this.#titleNode = document.querySelector("[data-project-field='name']");
+      this.#descriptionNode = document.querySelector("[data-project-field='description']");
+      this.#contentNode = document.querySelector("[data-project-field='content']");
+      this.#previewNode = document.querySelector('[data-project-preview]');
+      this.#visibilityNode = document.querySelector('[data-project-visibility]');
+      this.#editableNodes = [this.#titleNode, this.#descriptionNode, this.#contentNode].filter(Boolean);
+
+      this.#editableNodes.forEach((node) => {
+        node.addEventListener('dblclick', (e) => this.open(e.target.closest('[data-project-field]')));
+        node.addEventListener('focus', () => {
+          this.#activeEditable = node;
+        });
+        node.addEventListener('click', () => {
+          this.#activeEditable = node;
+        });
+        node.addEventListener('keydown', (e) => this.#onKeyDown(e));
+      });
+
+      onAction(this.#uploadTrigger, () => {
+        if (!edits.busy) this.#uploadInput?.click();
+      });
+      this.#uploadInput?.addEventListener('change', (event) => this.#onUploadChange(event));
+      onAction(this.#visibilityToggle, () => this.#toggleVisibility());
+
+      this.#applyViewState();
+      this.#normalizeContent();
+      this.#setEditable(false);
     }
-    if (this.#visibilityToggle) {
-      this.#visibilityToggle.textContent = project.isHidden ? 'Publish Project' : 'Hide Project';
+
+    open(triggerNode) {
+      if (this.#state !== 'idle' || edits.busy || !triggerNode) return;
+      this.#enterEditing(triggerNode);
     }
-    if (this.#previewNode) {
-      if (project.image && project.image.trim().length > 0) {
-        this.#previewNode.src = project.image;
-        if (this.#previewNode.parentElement) {
-          this.#previewNode.parentElement.hidden = false;
-        }
-      } else {
-        if (this.#previewNode.parentElement) {
-          this.#previewNode.parentElement.hidden = true;
+
+    #enterEditing(triggerNode) {
+      this.#takeSnapshot();
+      this.#state = 'editing';
+      this.#activeEditable = triggerNode;
+      this.#setEditable(true);
+      if (this.#status) {
+        this.#status.textContent = 'Inline editing unlocked.';
+      }
+
+      window.setTimeout(() => {
+        triggerNode?.focus();
+      }, 0);
+    }
+
+    #enterIdle() {
+      if (this.#state !== 'editing' || edits.busy) return;
+      this.#restoreSnapshot();
+      this.#normalizeContent();
+      this.#setEditable(false);
+      this.#state = 'idle';
+      if (this.#status) {
+        this.#status.textContent = '';
+      }
+      this.#snapshot = null;
+      this.#activeEditable = null;
+    }
+
+    async #enterSaving() {
+      if (this.#state !== 'editing' || edits.busy) return;
+      this.#state = 'saving';
+      this.#setStatus('Saving…');
+
+      const field = this.#activeEditable?.dataset.projectField;
+      const value = field === 'content' ? this.#contentNode.innerHTML.trim() : this.#activeEditable.textContent?.trim() || '';
+      const result = await edits.save({ [field]: value });
+      if (!result.ok) {
+        this.#state = 'editing';
+        this.#setStatus(result.message);
+        return;
+      }
+      project = result.value;
+
+      this.#state = 'idle';
+      window.location.reload();
+    }
+
+    #setEditable(enabled) {
+      this.#editableNodes.forEach((node) => {
+        const isActive = enabled && node === this.#activeEditable;
+        node.contentEditable = isActive ? 'true' : 'false';
+        node.dataset.editing = isActive ? 'true' : 'false';
+        node.classList.toggle('ring-1', isActive);
+        node.classList.toggle('ring-primary-container', isActive);
+        node.classList.toggle('ring-inset', isActive);
+        node.classList.toggle('bg-primary-container/5', isActive);
+        node.classList.toggle('px-3', isActive);
+        node.classList.toggle('py-2', isActive);
+        node.classList.toggle('cursor-text', isActive);
+        node.classList.toggle('cursor-pointer', !isActive);
+      });
+    }
+
+    #takeSnapshot() {
+      this.#snapshot = {
+        name: this.#titleNode.textContent,
+        description: this.#descriptionNode.textContent,
+        content: this.#contentNode.innerHTML,
+      };
+    }
+
+    #restoreSnapshot() {
+      if (!this.#snapshot) return;
+      this.#titleNode.textContent = this.#snapshot.name ?? '';
+      this.#descriptionNode.textContent = this.#snapshot.description ?? '';
+      this.#contentNode.innerHTML = this.#snapshot.content ?? '';
+    }
+
+    #applyViewState(includeText = true) {
+      if (includeText) {
+        this.#titleNode.textContent = project.name ?? '';
+        this.#descriptionNode.textContent = project.description ?? '';
+        this.#contentNode.innerHTML = project.content && project.content.trim().length > 0 ? project.content : emptyContentHtml;
+      }
+      if (this.#visibilityNode) {
+        this.#visibilityNode.textContent = project.isHidden ? 'Hidden' : 'Published';
+      }
+      if (this.#visibilityToggle) {
+        this.#visibilityToggle.textContent = project.isHidden ? 'Publish Project' : 'Hide Project';
+      }
+      if (this.#previewNode) {
+        if (project.image && project.image.trim().length > 0) {
+          this.#previewNode.src = project.image;
+          const frame = this.#previewNode.closest('picture')?.parentElement || this.#previewNode.parentElement;
+          if (frame) frame.hidden = false;
+        } else {
+          this.#previewNode.src = '';
+          const frame = this.#previewNode.closest('picture')?.parentElement || this.#previewNode.parentElement;
+          if (frame) frame.hidden = true;
         }
       }
     }
-  }
 
-  #normalizeContent() {
-    if (this.#contentNode && !this.#contentNode.innerHTML.trim()) {
-      this.#contentNode.innerHTML = emptyContentHtml;
+    #normalizeContent() {
+      if (this.#contentNode && !this.#contentNode.innerHTML.trim()) {
+        this.#contentNode.innerHTML = emptyContentHtml;
+      }
+    }
+
+    #onKeyDown(event) {
+      switch (event.key) {
+        case 'Enter':
+          event.preventDefault();
+          if (this.#activeEditable === this.#contentNode && event.shiftKey) {
+            insertHtml('<br>');
+          } else {
+            this.#enterSaving();
+          }
+          break;
+        case 'Escape':
+          event.preventDefault();
+          this.#enterIdle();
+          break;
+      }
+    }
+
+    #setStatus(message) {
+      if (this.#status) {
+        this.#status.textContent = message;
+      }
+      if (this.#adminStatus) {
+        this.#adminStatus.textContent = message;
+      }
+    }
+
+    async #toggleVisibility() {
+      if (this.#state === 'saving' || edits.busy) return;
+      project.isHidden = !project.isHidden;
+      this.#applyViewState(false);
+      this.#setStatus(project.isHidden ? 'Hiding project…' : 'Publishing project…');
+
+      const result = await edits.save({ isHidden: project.isHidden });
+      project = edits.project;
+      this.#applyViewState(false);
+      if (!result.ok) {
+        this.#setStatus(result.message);
+        return;
+      }
+      this.#setStatus(project.isHidden ? 'Project hidden.' : 'Project published.');
+    }
+
+    async #onUploadChange(event) {
+      const input = event.target;
+      const file = input?.files?.[0];
+      if (!file) return;
+      input.value = '';
+      if (this.#state === 'saving' || edits.busy) return;
+      this.#setStatus('Uploading image…');
+      const result = await edits.save({ image: file });
+      project = edits.project;
+      this.#applyViewState(false);
+      if (!result.ok) {
+        this.#setStatus(result.message);
+        return;
+      }
+      this.#setStatus('Image updated.');
     }
   }
 
-  #onKeyDown(event) {
-    switch (event.key) {
-      case 'Enter':
-        event.preventDefault();
-        if (this.#activeEditable === this.#contentNode && event.shiftKey) {
-          insertHtml('<br>');
-        } else {
-          this.#enterSaving();
-        }
-        break;
-      case 'Escape':
-        event.preventDefault();
-        this.#enterIdle();
-        break;
-    }
+  function initialize() {
+    const machine = new EditorStateMachine();
+    window.__openProjectEditor = (node) => machine.open(node);
   }
-
-  async #saveProject() {
-    const payload = {
-      name: this.#titleNode.textContent?.trim() || '',
-      description: this.#descriptionNode.textContent?.trim() || '',
-      image: project.image?.trim() || '',
-      content: this.#contentNode.innerHTML.trim(),
-      isHidden: Boolean(project.isHidden),
-    };
-
-    const response = await fetch(`/api/projects/${project.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      const body = await response.json().catch(() => null);
-      this.#state = 'editing';
-      this.#setStatus(body?.error || 'Save failed.');
-    }
-
-    return response;
-  }
-
-  #setStatus(message) {
-    if (this.#status) {
-      this.#status.textContent = message;
-    }
-    if (this.#adminStatus) {
-      this.#adminStatus.textContent = message;
-    }
-  }
-
-  async #toggleVisibility() {
-    if (this.#state === 'saving') return;
-    const previous = project.isHidden;
-    project.isHidden = !project.isHidden;
-    this.#applyViewState();
-    this.#setStatus(project.isHidden ? 'Hiding project…' : 'Publishing project…');
-
-    const response = await this.#saveProject();
-    if (!response.ok) {
-      project.isHidden = previous;
-      this.#applyViewState();
-      return;
-    }
-    this.#setStatus(project.isHidden ? 'Project hidden.' : 'Project published.');
-  }
-
-  async #onUploadChange(event) {
-    const input = event.target;
-    const file = input?.files?.[0];
-    if (!file) return;
-
-    const dataUrl = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
-      reader.onerror = () => reject(new Error('Failed to read image.'));
-      reader.readAsDataURL(file);
-    }).catch(() => null);
-
-    input.value = '';
-    if (!dataUrl) {
-      this.#setStatus('Image upload failed.');
-      return;
-    }
-
-    const previousImage = project.image ?? '';
-    project.image = dataUrl;
-    this.#applyViewState();
-    this.#setStatus('Uploading image…');
-
-    const response = await this.#saveProject();
-    if (!response.ok) {
-      project.image = previousImage;
-      this.#applyViewState();
-      return;
-    }
-    this.#setStatus('Image updated.');
-  }
-}
-
-const machine = new EditorStateMachine();
-window.__openProjectEditor = (node) => machine.open(node);
+  // The editor partial precedes the metadata controls in the rendered document.
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initialize, { once: true });
+  else initialize();
+})();
 </script>

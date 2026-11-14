@@ -1,13 +1,11 @@
-import { Injectable, type ProjectsRepository } from '@bg/core';
-import type { CanEditProjects } from '../project/project.controller';
+import { Injectable, type ProjectAccessResolver, type ProjectsRepository } from '@bg/core';
 import { PROJECT_ICONS } from '../project/project-icons';
 import { PROJECT_LIMITS } from '../project/project-input';
-import { renderComponentTemplate, renderDocument } from '../site';
+import { renderComponentTemplate, renderDynamicPage } from '../site';
 
 export interface AdminControllerDeps {
-  projectsRepository: ProjectsRepository;
-  canEditProjects: CanEditProjects;
-  sessionEmail: (req: Request) => string | null;
+  projectsRepository: Pick<ProjectsRepository, 'list'>;
+  projectAccess: ProjectAccessResolver;
 }
 
 function renderUnauthorized(): string {
@@ -87,50 +85,32 @@ function renderUnauthorized(): string {
 
 @Injectable()
 export class AdminController {
-  private readonly projectsRepository: ProjectsRepository;
-  private readonly canEditProjects: CanEditProjects;
-  private readonly sessionEmail: (req: Request) => string | null;
+  private readonly projectsRepository: AdminControllerDeps['projectsRepository'];
+  private readonly projectAccess: ProjectAccessResolver;
 
   constructor(deps: AdminControllerDeps) {
     this.projectsRepository = deps.projectsRepository;
-    this.canEditProjects = deps.canEditProjects;
-    this.sessionEmail = deps.sessionEmail;
+    this.projectAccess = deps.projectAccess;
   }
 
   async page(req: Request): Promise<Response> {
-    const email = this.sessionEmail(req);
+    const access = await this.projectAccess(req);
 
-    const docConfig = {
-      title: {
-        en: 'ADMIN — BEGENCH_GELDYEV@ROOT:~$',
-        ru: 'ADMIN — BEGENCH_GELDYEV@ROOT:~$',
-      },
-      fragmentFile: 'projects.html',
-      brandIsLink: true,
-      footerVariant: 'default' as const,
-      showTerminalIcon: true,
-      pageTransitions: false,
-    };
-
-    const responseHeaders = {
-      'Content-Type': 'text/html; charset=utf-8',
-      'Cache-Control': 'no-store',
-      'X-Robots-Tag': 'noindex',
-    };
-
-    if (!email) {
-      const content = await renderComponentTemplate('admin/login.html');
-      return new Response(await renderDocument(docConfig, content, 'en'), {
-        headers: responseHeaders,
+    const render = (contentHtml: string) =>
+      renderDynamicPage(req, {
+        page: 'admin',
+        title: 'ADMIN — BEGENCH_GELDYEV@ROOT:~$',
+        contentHtml,
       });
+
+    if (access === 'visitor') {
+      const content = await renderComponentTemplate('admin/login.html');
+      return render(content);
     }
 
-    const canEdit = await this.canEditProjects(req);
-    if (!canEdit) {
+    if (access === 'read-only') {
       const content = renderUnauthorized();
-      return new Response(await renderDocument(docConfig, content, 'en'), {
-        headers: responseHeaders,
-      });
+      return render(content);
     }
 
     const projects = await this.projectsRepository.list({ includeHidden: true });
@@ -153,8 +133,6 @@ export class AdminController {
       script,
     });
 
-    return new Response(await renderDocument(docConfig, content, 'en'), {
-      headers: responseHeaders,
-    });
+    return render(content);
   }
 }

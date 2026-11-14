@@ -90,7 +90,7 @@
   }
 
   function chat(message) {
-    const turn = { text: '', follow: nearBottom() };
+    const turn = { follow: nearBottom() };
     currentTurn = turn;
     input.readOnly = true;
     input.placeholder = copy.waiting;
@@ -99,8 +99,16 @@
     loader.hidden = false;
     status.textContent = copy.waiting;
 
-    function settle(error = null) {
+    function settle(result) {
       if (currentTurn !== turn) return;
+      const text = result?.ok === true && typeof result.text === 'string' ? result.text : '';
+      const error = text.trim()
+        ? null
+        : result?.reason === 'rate-limit'
+          ? copy.rate
+          : result?.reason === 'question-length'
+            ? copy.length
+            : copy.unavailable;
       const follow = turn.follow && nearBottom();
       const previousTop = body.scrollTop;
       currentTurn = null;
@@ -112,7 +120,7 @@
       const answer = document.createElement('span');
       answer.className = error ? 'text-error/80' : 'whitespace-pre-wrap';
       answer.setAttribute(error ? 'data-chat-error' : 'data-answer', '');
-      answer.textContent = error || turn.text;
+      answer.textContent = error || text;
       line.append(speaker, answer);
       body.insertBefore(line, inputLine);
       loader.hidden = true;
@@ -132,30 +140,9 @@
     }
 
     try {
-      const request = window.askChat.ask(message, {
-        onText(text) {
-          if (currentTurn === turn && typeof text === 'string') turn.text = text;
-        },
-        onDone() {
-          settle(turn.text.trim() ? null : copy.unavailable);
-        },
-        onError(message) {
-          settle(
-            message === 'rate limit reached, try again in a few minutes'
-              ? copy.rate
-              : message === 'questions are limited to 500 characters'
-                ? copy.length
-                : copy.unavailable,
-          );
-        },
-      });
-      // Catch rejection, synchronous failure, or a transport resolving without a terminal callback.
-      Promise.resolve(request).then(
-        () => settle(copy.unavailable),
-        () => settle(copy.unavailable),
-      );
+      Promise.resolve(window.askChat.ask(message)).then(settle, () => settle(null));
     } catch {
-      settle(copy.unavailable);
+      settle(null);
     }
     return null;
   }

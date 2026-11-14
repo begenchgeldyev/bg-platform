@@ -1,24 +1,20 @@
 // SITE_URL=http://localhost:8681 PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs bun apps/site/tests/projects-motion.browser.ts
 // Animated WebP scenes on the real gallery page and rendered project pages.
-// The gallery API and the detail route use fixtures because local Postgres is optional.
+// Deterministic repository data goes through the production ProjectController;
+// only storage is replaced, never card/detail markup or document policy.
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
-import { projectArt } from '../project/project-art';
-import { renderComponentTemplate, renderDocument } from '../site';
+import type { Project } from '@bg/core';
+import { ProjectController, type ProjectControllerRepository } from '../project/project.controller';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const baseURL = process.env.SITE_URL || 'http://localhost:8681';
-const output = process.env.EVIDENCE_DIR || '/tmp/opencode/project-animated-webp/browser';
+const output = process.env.EVIDENCE_DIR || `${process.cwd()}/.slim/deepwork/codebase-deepening/rendering-artifacts/browser`;
 const executablePath = process.env.CHROMIUM_PATH || '/usr/bin/chromium';
 await mkdir(output, { recursive: true });
 
 const PANTHEON = '/public/projects/pantheon-pixel';
 const PLATFORM = '/public/projects/bg-platform-pixel';
-const CARD_SIZES = '(max-width: 639px) 100vw, (max-width: 1023px) 50vw, 384px';
-const DETAIL_SIZES = '(max-width: 767px) 100vw, 768px';
-const cardTemplate = await Bun.file(new URL('../components/projects/card.html', import.meta.url)).text();
-const motionTemplateUrl = new URL('../components/projects/image-motion.html', import.meta.url);
-const motionPartial = (await Bun.file(motionTemplateUrl).exists()) ? await Bun.file(motionTemplateUrl).text() : '';
 
 const browser = await chromium.launch({ executablePath, headless: true });
 const checks: { name: string; passed: boolean; data?: unknown; error?: string }[] = [];
@@ -26,65 +22,52 @@ const screenshots: string[] = [];
 const failures: string[] = [];
 let aiRequests = 0;
 
-function sources(base: string, sizes: string, lazy: boolean) {
-  const attribute = lazy ? 'data-srcset' : 'srcset';
-  const set = (format: string) => [400, 800, 1200, 1448].map((width) => `${base}-${width}.${format} ${width}w`).join(', ');
-  return `<source type="image/avif" sizes="${sizes}" ${attribute}="${set('avif')}"><source type="image/webp" sizes="${sizes}" ${attribute}="${set('webp')}">`;
-}
-
-function fill(template: string, values: Record<string, string>) {
-  return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key: string) => values[key] ?? '');
-}
-
-function card(id: number, name: string, base: string) {
-  const motion = projectArt(`${base}.png`)?.motion;
-  const picture = `<picture>${sources(base, CARD_SIZES, true)}<img data-project-cover${motion ? ` data-project-motion="${motion.card}"` : ''} data-src="${base}.png" width="1448" height="1086" loading="lazy" decoding="async" alt=""></picture>`;
-  return fill(cardTemplate, {
-    description: `${name} fixture description`,
-    hiddenBadge: '',
-    icon: 'terminal',
+function fixtureProject(id: number, name: string, base: string, content: string | null = null): Project {
+  return {
+    id,
     name,
-    pictureHtml: picture,
-    projectHref: `/projects/${id}`,
-    projectId: String(id),
-    tagsHtml: '',
-    viewProjectText: 'View project',
-    visibilityDescription: '',
-  });
+    description: `${name} fixture description`,
+    content,
+    image: `${base}.png`,
+    isHidden: false,
+    icon: 'terminal',
+    tags: [],
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+    updatedAt: new Date('2026-01-01T00:00:00Z'),
+  };
+}
+
+function fixtureController(projects: Project[]) {
+  const refuseWrite = async (): Promise<never> => {
+    throw new Error('Motion fixture forbids writes');
+  };
+  const repository: ProjectControllerRepository = {
+    async list({ includeHidden }) {
+      return projects.filter((project) => includeHidden || !project.isHidden);
+    },
+    async findById(id) {
+      return projects.find((project) => project.id === id) ?? null;
+    },
+    create: refuseWrite,
+    updateById: refuseWrite,
+    deleteById: refuseWrite,
+  };
+  return new ProjectController(repository, async () => 'visitor');
+}
+
+async function card(id: number, name: string, base: string) {
+  const controller = fixtureController([fixtureProject(id, name, base)]);
+  const response = await controller.get(new Request(`${baseURL}/api/projects`, { headers: { 'HX-Request': 'true' } }));
+  assert.equal(response.status, 200);
+  return response.text();
 }
 
 async function detailFixture(base: string, content: string) {
-  const motion = projectArt(`${base}.png`)?.motion;
-  const imageBlock = `<div class="overflow-hidden border border-outline-variant/30 bg-surface">
-    <picture>${sources(base, DETAIL_SIZES, false)}<img data-project-preview${motion ? ` data-project-motion="${motion.page}"` : ''} class="max-h-[520px] w-full object-cover" src="${base}.png" width="1448" height="1086" fetchpriority="high" decoding="async" alt="Project preview"></picture>
-  </div>`;
-  const pageHtml = await renderComponentTemplate('projects/page.html', {
-    adminControls: '',
-    content,
-    contentEditableAttrs: '',
-    createdAt: 'Jan 01, 2026',
-    description: 'Fixture description',
-    editor: '',
-    headerEditableAttrs: '',
-    imageBlock,
-    imageMotion: motionPartial,
-    projectId: '4',
-    projectName: 'Pantheon',
-    route: '/projects/4',
-    tagsHtml: '',
-    updatedAt: 'Jan 01, 2026',
-    visibility: 'Published',
-  });
-  return renderDocument(
-    {
-      title: { en: 'FIXTURE — BEGENCH_GELDYEV@ROOT:~$', ru: 'FIXTURE' },
-      fragmentFile: 'projects.html',
-      activeNav: 'projects',
-      brandIsLink: true,
-    },
-    pageHtml,
-    'en',
-  );
+  const controller = fixtureController([fixtureProject(4, 'Pantheon', base, content)]);
+  const response = await controller.getPageById(new Request(`${baseURL}/projects/4`), 4);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  return response.text();
 }
 
 const detailBody = Array.from({ length: 60 }, (_, index) => `<p>Detail fixture line ${index} for a scrollable page.</p>`).join('');
@@ -135,6 +118,8 @@ function motionRequests(page: BrowserPage) {
 }
 
 async function probe(page: BrowserPage, kind: 'card' | 'detail') {
+  // Do not accept unstyled geometry/motion evidence when generated CSS is missing.
+  await page.waitForFunction(() => getComputedStyle(document.body).fontFamily.includes('OpenTUI Mono'));
   return page.evaluate((surface: 'card' | 'detail') => {
     const image = document.querySelector<HTMLImageElement>(surface === 'card' ? '[data-project-cover]' : '[data-project-preview]');
     const frame = surface === 'card' ? image?.closest('.project-cover') : image?.closest('picture')?.parentElement;
@@ -194,7 +179,8 @@ function assertIdle(state: Awaited<ReturnType<typeof probe>>, expected: string |
   return state;
 }
 
-function galleryRoute(context: BrowserContext, body: string) {
+async function galleryRoute(context: BrowserContext, content: string | Promise<string>) {
+  const body = await content;
   return context.route('**/api/projects', (route: BrowserRoute) => route.fulfill({ status: 200, contentType: 'text/html', body }));
 }
 
@@ -633,7 +619,7 @@ try {
   await check('repeated HTMX replacement cleans old frames and registers later images once', async () => {
     const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
     const page = await openPage(context);
-    const fixture = [card(4, 'Pantheon', PANTHEON), card(2, 'bg-platform', PLATFORM)].join('');
+    const fixture = (await Promise.all([card(4, 'Pantheon', PANTHEON), card(2, 'bg-platform', PLATFORM)])).join('');
     await galleryRoute(context, fixture);
     try {
       await page.goto('/projects', { waitUntil: 'domcontentloaded' });
@@ -695,7 +681,7 @@ try {
           gallery.append(later);
           gallery.dispatchEvent(new Event('htmx:after:swap', { bubbles: true }));
         },
-        card(9, 'Later project', PANTHEON),
+        await card(9, 'Later project', PANTHEON),
       );
       await page.locator('[data-fixture="later"] .project-cover').scrollIntoViewIfNeeded();
       await page.waitForFunction(() => document.querySelector<HTMLImageElement>('[data-fixture="later"] img')?.dataset.loaded === 'true');
@@ -711,8 +697,8 @@ try {
   await check('no-JavaScript visitors keep the static image and no decoration', async () => {
     const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 }, javaScriptEnabled: false });
     const page = await context.newPage();
-    await page.route('**/api/projects', (route: BrowserRoute) =>
-      route.fulfill({ status: 200, contentType: 'text/html', body: card(4, 'Pantheon', PANTHEON) }),
+    await page.route('**/api/projects', async (route: BrowserRoute) =>
+      route.fulfill({ status: 200, contentType: 'text/html', body: await card(4, 'Pantheon', PANTHEON) }),
     );
     await page.route('**/projects/4', (route: BrowserRoute) => route.fulfill({ status: 200, contentType: 'text/html', body: detailHtml }));
     try {
@@ -846,7 +832,7 @@ try {
     const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
     const page = await openPage(context);
     const requests = motionRequests(page);
-    const html = card(4, 'Uploaded project', PANTHEON).replace(/ data-project-motion="[^"]*"/, '');
+    const html = (await card(4, 'Uploaded project', PANTHEON)).replace(/ data-project-motion="[^"]*"/, '');
     await galleryRoute(context, html);
     try {
       await page.goto('/projects');
@@ -864,7 +850,7 @@ try {
     const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
     const page = await openPage(context);
     const requests = motionRequests(page);
-    await galleryRoute(context, `<div style="grid-column:1/-1;height:2000px"></div>${card(4, 'Pantheon', PANTHEON)}`);
+    await galleryRoute(context, `<div style="grid-column:1/-1;height:2000px"></div>${await card(4, 'Pantheon', PANTHEON)}`);
     try {
       await page.goto('/projects');
       await page.waitForSelector('.project-card', { state: 'attached' });

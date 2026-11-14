@@ -54,21 +54,6 @@ function post(messages: unknown[] = [{ id: 'q', role: 'user', parts: [{ type: 't
     body: JSON.stringify({ messages }),
   });
 }
-async function ask(chat: ReturnType<typeof createAskChat>, text: string) {
-  let answer = '';
-  let error: string | undefined;
-  await chat.ask(text, {
-    onText: (value) => {
-      answer = value;
-    },
-    onDone() {},
-    onError: (value) => {
-      error = value;
-    },
-  });
-  return { answer, error };
-}
-
 describe('read-only virtual AI tools', () => {
   test('real server tool -> final answer -> client follow-up strips all tool parts and metadata', async () => {
     const model = new MockLanguageModelV4({
@@ -85,9 +70,9 @@ describe('read-only virtual AI tools', () => {
     });
     try {
       const chat = createAskChat({ api: new URL('/api/ask', server.url).href });
-      expect(await ask(chat, 'What skills?')).toEqual({ answer: 'Begench builds public projects.', error: undefined });
+      expect(await chat.ask('What skills?')).toEqual({ ok: true, text: 'Begench builds public projects.' });
       expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('TypeScript');
-      expect(await ask(chat, 'Since when?')).toEqual({ answer: 'Since 2023.', error: undefined });
+      expect(await chat.ask('Since when?')).toEqual({ ok: true, text: 'Since 2023.' });
       expect(JSON.stringify(bodies[1])).not.toContain('tool-');
       expect(model.doStreamCalls[2]?.prompt.map((entry) => entry.role)).toEqual(['system', 'user', 'assistant', 'user']);
     } finally {

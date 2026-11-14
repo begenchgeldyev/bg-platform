@@ -2,17 +2,17 @@
 // Load-time prompt focus, preventScroll, coarse-pointer opt-out, settle refocus and border independence.
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
+import type { AskChat, AskResult } from '../client/ask-chat';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const baseURL = process.env.SITE_URL || 'http://localhost:8625';
 const output = process.env.EVIDENCE_DIR || '/tmp/opencode/terminal-autofocus';
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true });
-type Handlers = { onText(text: string): void; onDone(): void; onError(message: string): void };
 declare global {
   interface Window {
-    askChat: { busy(): boolean; ask(message: string, handlers: Handlers): Promise<void> };
-    pendingAsk: Handlers;
+    askChat: AskChat;
+    pendingAsk: (result: AskResult) => void;
   }
 }
 const report: unknown[] = [];
@@ -52,10 +52,10 @@ try {
     await page.evaluate(() => {
       window.askChat = {
         busy: () => false,
-        ask: (_message, options) => {
-          window.pendingAsk = options;
-          return new Promise(() => {});
-        },
+        ask: () =>
+          new Promise((resolve) => {
+            window.pendingAsk = resolve;
+          }),
       };
     });
     await page.keyboard.type('hello');
@@ -63,8 +63,7 @@ try {
     await page.waitForFunction(() => Boolean(document.querySelector('[data-user-message]')));
     assert.equal(await input.getAttribute('readonly'), '', 'the prompt is locked while the reply streams');
     await page.evaluate(() => {
-      window.pendingAsk.onText('Answer');
-      window.pendingAsk.onDone();
+      window.pendingAsk({ ok: true, text: 'Answer' });
     });
     await page.waitForFunction(() => !document.querySelector<HTMLInputElement>('#terminal-input')?.readOnly);
     assert.equal(await input.evaluate(inputIsActive), true, 'settling returns focus to the prompt');
@@ -78,8 +77,7 @@ try {
     await page.waitForFunction(() => document.querySelectorAll('[data-user-message]').length === 2);
     await headerLink.focus();
     await page.evaluate(() => {
-      window.pendingAsk.onText('Second answer');
-      window.pendingAsk.onDone();
+      window.pendingAsk({ ok: true, text: 'Second answer' });
     });
     await page.waitForFunction(() => !document.querySelector<HTMLInputElement>('#terminal-input')?.readOnly);
     assert.equal(await headerLink.evaluate(inputIsActive), true, 'settle leaves an already focused control alone');

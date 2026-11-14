@@ -73,6 +73,7 @@ Cross-site and non-JSON guards are shared in `apps/site/http/requests.ts`; per-I
 `apps/site/site.ts` is the templating engine. It owns:
 - **`PAGE_CONFIGS`** — maps URL paths to page metadata (title, active nav, footer variant, etc.).
 - **`renderLayout()`** — assembles the full HTML document: shared `<head>` (Tailwind CDN, HTMX, fonts, custom CSS), header, page fragment, footer.
+- **`renderDynamicPage(req, { page, title, contentHtml })`** — owns project/admin document presets, escapes raw title text once, preserves trusted rendered body HTML, and returns session-sensitive `no-store` responses with bodyless HEAD support. Admin always uses English, `noindex`, and no page transitions; project pages follow the language cookie. Controllers supply content, not layout/cache policy. Static `renderPage()` retains separate production language-specific ETags and revalidation.
 - **`resolveIncludes()`** — replaces `<!--#include filename.html-->` comments in page HTML with component partials from `apps/site/components/`.
 - **`servePublicAsset()`** — path-safe static file serving with MIME detection.
 
@@ -107,7 +108,7 @@ The enforcement pipeline:
 - **PDP** (`pdp.ts`) — pure function that evaluates policies against `{ subject, action, resource, resourceAttributes, context }`. Deny-overrides-allow; defaults to deny if no policy matches.
 - **PIP** (`pip.ts`) — fetches `users` and `policies` rows from Postgres.
 
-Project writes do not use `enforce()`. `ProjectController` authorizes inside itself through an injected `canEditProjects(req)`, wired in `apps/site/app-container.ts`; it returns false without a database query when there is no session, and otherwise calls `canAccess(req, { actions: 'update', resource: 'project' })`. `enforce()` still exists in core but no route uses it.
+Project writes do not use `enforce()`. Core's configured `projectAccess(req)` resolves the signed identity once and returns `visitor`, `read-only` or `editor`. Visitors skip all policy storage reads; signed sessions use the shared PDP pipeline for `update` on `project`. Admin and `ProjectController` receive that same decision through `apps/site/app-container.ts`. Decisions are never cached across requests. The PIP reuses core's configured `Db`; generic `canAccess()` and retained `enforce()` still evaluate anonymous subjects as viewers rather than applying the project-only fast path. No route uses `enforce()`.
 
 Policies and user roles are stored in the database (`packages/core/db/schema.ts`). Seed the initial owner account and allow-all policy with `bun run db:seed`.
 

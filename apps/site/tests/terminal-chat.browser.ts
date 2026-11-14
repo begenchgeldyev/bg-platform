@@ -2,18 +2,19 @@
 // Fail-closed: /api/ask is mocked at fetch, with a network abort guard underneath.
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
+import type { AskChat, AskResult } from '../client/ask-chat';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const baseURL = process.env.SITE_URL || 'http://localhost:8614';
-const output = process.env.EVIDENCE_DIR || '/tmp/opencode/terminal-chat-ux';
+const output =
+  process.env.EVIDENCE_DIR || new URL('../../../.slim/deepwork/codebase-deepening/terminal-artifacts/browser/', import.meta.url).pathname;
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ executablePath: '/usr/bin/chromium', headless: true });
-type Handlers = { onText(text: string): void; onDone(): void; onError(message: string): void };
 declare global {
   interface Window {
-    askChat: { busy(): boolean; ask(question: string, handlers: Handlers): Promise<void> };
+    askChat: AskChat;
     terminalMock: { requests: string[]; chunk(text: string): void; done(): void; fail(): void; nextStatus: number };
-    terminalHandlers: Handlers[];
+    terminalResults: Array<(result: AskResult) => void>;
     terminalStatusUpdates: string[];
   }
 }
@@ -84,6 +85,7 @@ try {
       page.on('pageerror', (error: Error) => errors.push(error.message));
       await page.goto('/', { waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => Boolean(window.askChat));
+      await page.waitForFunction(() => getComputedStyle(document.getElementById('terminal-body') as Element).overflowY === 'auto');
       await page.evaluate(() => {
         window.terminalStatusUpdates = [];
         const status = document.getElementById('terminal-status') as HTMLElement;
@@ -220,6 +222,12 @@ try {
       });
       await page.waitForFunction(() => !document.querySelector<HTMLInputElement>('#terminal-input')?.readOnly);
       assert.equal(await page.locator('[data-answer]').last().textContent(), 'Recovered.');
+      const retryHistory = await page.evaluate(() => JSON.parse(window.terminalMock.requests[2]).messages);
+      assert.deepEqual(
+        retryHistory.map((message: { role: string }) => message.role),
+        ['user', 'assistant', 'user'],
+      );
+      assert.equal(JSON.stringify(retryHistory).includes('PRIVATE'), false, 'failed partial history stays private');
       assert.equal(await page.locator('[data-user-message]').count(), 3);
       await input.press('ArrowUp');
       assert.equal(await input.inputValue(), 'Keep this retry draft');
@@ -248,6 +256,7 @@ try {
   const page = await context.newPage();
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => Boolean(window.askChat));
+  await page.waitForFunction(() => getComputedStyle(document.getElementById('terminal-body') as Element).overflowY === 'auto');
   const input = page.locator('#terminal-input');
   await input.fill('A long answer please');
   await input.press('Enter');
@@ -268,9 +277,10 @@ try {
       remaining: body.scrollHeight - body.scrollTop - body.clientHeight,
     };
   });
+  await Bun.write(`${output}/long-answer-geometry.json`, JSON.stringify(beginning, null, 2));
+  await page.locator('#terminal-wrap').screenshot({ path: `${output}/chat-long-answer-beginning.png` });
   assert.ok(Math.abs(beginning.offset) <= 3, 'beginning of long reply is visible, not its end');
   assert.ok(beginning.remaining > 1000);
-  await page.locator('#terminal-wrap').screenshot({ path: `${output}/chat-long-answer-beginning.png` });
   await input.fill('Let me read the earlier reply');
   await input.press('Enter');
   await page.waitForFunction(() => window.terminalMock.requests.length === 2);
@@ -326,6 +336,7 @@ try {
     const page = await context.newPage();
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => Boolean(window.askChat));
+    await page.waitForFunction(() => getComputedStyle(document.getElementById('terminal-body') as Element).overflowY === 'auto');
     await page.locator('#terminal-input').fill('Reduced motion');
     await page.locator('#terminal-input').press('Enter');
     await page.waitForFunction(() => window.terminalMock.requests.length === 1);
@@ -366,6 +377,7 @@ try {
   failedPage.on('pageerror', (error: Error) => failureExceptions.push(error.message));
   await failedPage.goto('/', { waitUntil: 'domcontentloaded' });
   await failedPage.waitForFunction(() => Boolean(window.askChat));
+  await failedPage.waitForFunction(() => getComputedStyle(document.getElementById('terminal-body') as Element).overflowY === 'auto');
   await failedPage.evaluate(() => {
     window.askChat.ask = () => Promise.reject(new Error('PRIVATE rejection'));
   });
@@ -375,42 +387,39 @@ try {
   assert.equal(await failedPage.locator('#terminal-input').inputValue(), 'Retry after rejection');
   assert.equal(await failedPage.locator('#terminal-input').getAttribute('readonly'), null);
   await failedPage.evaluate(() => {
-    window.terminalHandlers = [];
+    window.terminalResults = [];
     window.askChat = {
       busy: () => false,
-      ask(_question, handlers) {
-        window.terminalHandlers.push(handlers);
-        return new Promise(() => {});
+      ask() {
+        return new Promise((resolve) => window.terminalResults.push(resolve));
       },
     };
   });
   await failedPage.locator('#terminal-input').press('Enter');
   await failedPage.evaluate(() => {
-    window.terminalHandlers[0]?.onText('PRIVATE partial');
-    window.terminalHandlers[0]?.onError('PRIVATE failure');
+    window.terminalResults[0]?.({ ok: false, reason: 'unavailable' });
   });
+  await failedPage.waitForFunction(() => !document.querySelector<HTMLInputElement>('#terminal-input')?.readOnly);
   await failedPage.locator('#terminal-input').press('Enter');
   await failedPage.evaluate(() => {
-    window.terminalHandlers[0]?.onText('Stale text');
-    window.terminalHandlers[0]?.onDone();
+    window.terminalResults[0]?.({ ok: true, text: 'Stale text' });
   });
   assert.equal(await failedPage.locator('#terminal-input').getAttribute('readonly'), '');
   assert.equal(await failedPage.locator('[data-answer]').count(), 0);
   await failedPage.evaluate(() => {
-    const current = window.terminalHandlers[1];
-    current?.onText('Exactly one safe final answer.');
-    current?.onDone();
-    current?.onDone();
-    current?.onError('Late failure');
+    const current = window.terminalResults[1];
+    current?.({ ok: true, text: 'Exactly one safe final answer.' });
+    current?.({ ok: false, reason: 'unavailable' });
   });
+  await failedPage.waitForFunction(() => !document.querySelector<HTMLInputElement>('#terminal-input')?.readOnly);
   assert.equal(await failedPage.locator('[data-answer]').count(), 1);
   assert.equal(await failedPage.locator('[data-answer]').textContent(), 'Exactly one safe final answer.');
   assert.equal((await failedPage.locator('#terminal-body').textContent()).includes('PRIVATE'), false);
   assert.equal(await failedPage.locator('#terminal-input').getAttribute('readonly'), null);
   assert.deepEqual(failureExceptions, []);
-  await failedPage.locator('#terminal-wrap').screenshot({ path: `${output}/chat-rejected-and-stale-callbacks.png` });
+  await failedPage.locator('#terminal-wrap').screenshot({ path: `${output}/chat-rejected-and-settled-results.png` });
   await failures.close();
-  console.log('PASS rejected promise and stale/duplicate callbacks recover once, without unhandled errors');
+  console.log('PASS rejected promise and already-settled results recover once, without unhandled errors');
   assert.equal(escapedRequests, 0, 'no real API request escaped the deterministic mock');
 } finally {
   await Bun.write(`${output}/browser-report.json`, JSON.stringify({ cases: report, escapedRequests }, null, 2));

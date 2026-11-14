@@ -1,13 +1,12 @@
 import { stat } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
-import { type Lang, localizedFragmentFile, t } from './i18n';
+import { type Lang, localizedFragmentFile, resolveLang, t } from './i18n';
 
 type NavKey = 'projects' | 'logs' | 'cv';
 type FooterVariant = 'default' | 'home';
 
-type PageConfig = {
+type LayoutConfig = {
   title: Record<Lang, string>;
-  fragmentFile: string;
   activeNav?: NavKey;
   brandIsLink?: boolean;
   footerVariant?: FooterVariant;
@@ -15,6 +14,31 @@ type PageConfig = {
   selectionTextClass?: string;
   showTerminalIcon?: boolean;
   pageTransitions?: boolean;
+};
+
+type PageConfig = LayoutConfig & { fragmentFile: string };
+
+type DynamicPage = {
+  page: 'project' | 'admin';
+  /** Raw text; document rendering owns escaping. */
+  title: string;
+  /** Trusted, already-rendered HTML, not text to escape. */
+  contentHtml: string;
+};
+
+const DYNAMIC_PAGE_CONFIGS: Record<DynamicPage['page'], Omit<LayoutConfig, 'title'>> = {
+  project: {
+    activeNav: 'projects',
+    brandIsLink: true,
+    footerVariant: 'default',
+    showTerminalIcon: true,
+  },
+  admin: {
+    brandIsLink: true,
+    footerVariant: 'default',
+    showTerminalIcon: true,
+    pageTransitions: false,
+  },
 };
 
 const APP_DIR = import.meta.dir;
@@ -221,7 +245,7 @@ function renderNavLink(activeNav: NavKey | undefined, href: string, label: strin
   return `<a class="${classes}" href="${href}"${current}><span class="${labelClasses}">${label}</span></a>`;
 }
 
-async function renderHeader(config: PageConfig, lang: Lang) {
+async function renderHeader(config: LayoutConfig, lang: Lang) {
   const brand = config.brandIsLink
     ? `<a href="/" class="text-[#00FF41] font-mono font-bold tracking-widest text-sm hover:opacity-80 transition-opacity">
       begench@127.0.0.1
@@ -271,7 +295,7 @@ async function renderHeader(config: PageConfig, lang: Lang) {
   });
 }
 
-async function renderFooter(config: PageConfig, lang: Lang) {
+async function renderFooter(config: LayoutConfig, lang: Lang) {
   if (config.footerVariant === 'home') {
     return renderComponentTemplate('footer-home.html');
   }
@@ -283,7 +307,7 @@ async function renderFooter(config: PageConfig, lang: Lang) {
   return renderComponentTemplate('footer-default.html', { cvLink });
 }
 
-async function renderLayout(config: PageConfig, content: string, lang: Lang) {
+async function renderLayout(config: LayoutConfig, content: string, lang: Lang) {
   const selectionTextClass = config.selectionTextClass ?? 'selection:text-on-primary-container';
   return renderComponentTemplate('document.html', {
     content,
@@ -293,12 +317,30 @@ async function renderLayout(config: PageConfig, content: string, lang: Lang) {
     pageTransitions: config.pageTransitions === false ? '' : await renderComponentTemplate('page-transitions.html'),
     selectionTextClass,
     sharedHead: await renderSharedHead(),
-    title: config.title[lang],
+    title: config.title[lang]
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;'),
   });
 }
 
-export async function renderDocument(config: PageConfig, content: string, lang: Lang) {
-  return renderLayout(config, content, lang);
+export async function renderDynamicPage(req: Request, { page, title, contentHtml }: DynamicPage): Promise<Response> {
+  const lang = page === 'admin' ? 'en' : resolveLang(req);
+  const html = await renderLayout({ ...DYNAMIC_PAGE_CONFIGS[page], title: { en: title, ru: title } }, contentHtml, lang);
+  // These documents depend on the current session and must never share static-page
+  // caching or conditional revalidation, even when the title/body happen to match.
+  const headers = new Headers({
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-store',
+  });
+  if (page === 'admin') headers.set('X-Robots-Tag', 'noindex');
+  if (req.method === 'HEAD') {
+    headers.set('Content-Length', String(Buffer.byteLength(html)));
+    return new Response(null, { headers });
+  }
+  return new Response(html, { headers });
 }
 
 async function resolveIncludes(html: string): Promise<string> {

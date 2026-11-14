@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { localizedFragmentFile } from './i18n';
+import * as rendering from './site';
 import { renderPage, servePublicAsset } from './site';
 
 const FONT_PATH = '/public/fonts/OpenTUIMono-Regular.woff2';
@@ -241,7 +242,105 @@ describe('public asset ranges', () => {
   });
 });
 
+describe('dynamic document policy', () => {
+  test.each(['project', 'admin'] as const)('escapes raw %s titles once and preserves trusted body HTML', async (page) => {
+    const response = await rendering.renderDynamicPage(new Request('http://localhost/fixture'), {
+      page,
+      title: '</title><script>evil()</script> & "raw" &amp;',
+      contentHtml: '<main><strong data-trusted="yes">Intentional HTML &amp; text</strong></main>',
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8');
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('etag')).toBeNull();
+    const html = await response.text();
+    expect(html).toContain('<title>&lt;/title&gt;&lt;script&gt;evil()&lt;/script&gt; &amp; &quot;raw&quot; &amp;amp;</title>');
+    expect(html).not.toContain('<script>evil()');
+    expect(html).toContain('<main><strong data-trusted="yes">Intentional HTML &amp; text</strong></main>');
+  });
+
+  test.each([
+    'project',
+    'admin',
+  ] as const)('%s HEAD has GET metadata and byte length, never revalidates a session document', async (page) => {
+    const options = { page, title: 'Название', contentHtml: '<main>Привет</main>' };
+    const get = await rendering.renderDynamicPage(withHeaders('/fixture', { cookie: 'lang=ru; bg_session=owner' }), options);
+    const html = await get.text();
+    const head = await rendering.renderDynamicPage(
+      withHeaders('/fixture', { cookie: 'lang=ru; bg_session=owner', 'if-none-match': '*' }, 'HEAD'),
+      options,
+    );
+    expect(head.status).toBe(200);
+    expect(head.headers.get('content-length')).toBe(String(Buffer.byteLength(html)));
+    expect(await head.text()).toBe('');
+    for (const header of ['content-type', 'cache-control', 'x-robots-tag', 'etag']) {
+      expect(head.headers.get(header)).toBe(get.headers.get(header));
+    }
+    const conditional = await rendering.renderDynamicPage(withHeaders('/fixture', { 'if-none-match': '*' }), options);
+    expect(conditional.status).toBe(200);
+    expect(await conditional.text()).toContain('<main>Привет</main>');
+  });
+
+  test('project preset follows the language cookie and retains public chrome and transitions', async () => {
+    const response = await rendering.renderDynamicPage(withHeaders('/projects/1', { cookie: 'lang=ru' }), {
+      page: 'project',
+      title: 'PROJECT',
+      contentHtml: '<main>Body</main>',
+    });
+    const html = await response.text();
+    expect(html).toContain('<html class="dark" lang="ru">');
+    expect(html).toContain('>Проекты<');
+    expect(html).toContain('href="/projects" aria-current="page"');
+    expect(html).toContain('type="speculationrules"');
+    expect(html).toContain('@view-transition');
+    expect(response.headers.get('x-robots-tag')).toBeNull();
+  });
+
+  test('admin preset overrides Russian with English and excludes indexing and transitions', async () => {
+    const response = await rendering.renderDynamicPage(withHeaders('/admin', { cookie: 'lang=ru' }), {
+      page: 'admin',
+      title: 'ADMIN',
+      contentHtml: '<main>Body</main>',
+    });
+    const html = await response.text();
+    expect(html).toContain('<html class="dark" lang="en">');
+    expect(html).toContain('>Projects<');
+    expect(html).not.toContain('aria-current="page"');
+    expect(html).not.toContain('type="speculationrules"');
+    expect(html).not.toContain('@view-transition');
+    expect(response.headers.get('x-robots-tag')).toBe('noindex');
+  });
+});
+
 describe('page caching', () => {
+  test('production static ETags remain language-specific for GET, revalidation and HEAD', async () => {
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      const english = (await renderPage('/cv', 'en')) as Response;
+      const russian = (await renderPage('/cv', 'ru')) as Response;
+      const enTag = english.headers.get('etag') as string;
+      const ruTag = russian.headers.get('etag') as string;
+      expect(enTag).not.toBe(ruTag);
+      const ruHtml = await russian.text();
+      const mismatch = (await renderPage('/cv', 'ru', withHeaders('/cv', { 'if-none-match': enTag }))) as Response;
+      expect(mismatch.status).toBe(200);
+      expect(await mismatch.text()).toBe(ruHtml);
+      const matching = (await renderPage('/cv', 'ru', withHeaders('/cv', { 'if-none-match': ruTag }))) as Response;
+      expect(matching.status).toBe(304);
+      expect(await matching.text()).toBe('');
+      const head = (await renderPage('/cv', 'ru', withHeaders('/cv', {}, 'HEAD'))) as Response;
+      expect(head.headers.get('etag')).toBe(ruTag);
+      expect(head.headers.get('vary')).toBe('Cookie');
+      expect(head.headers.get('cache-control')).toBe('no-cache');
+      expect(head.headers.get('content-length')).toBe(String(Buffer.byteLength(ruHtml)));
+      expect(await head.text()).toBe('');
+    } finally {
+      if (previous === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previous;
+    }
+  });
+
   test('leaves dev responses uncached', async () => {
     const res = await renderPage('/cv', 'en');
     expect(res as Response).not.toBeNull();

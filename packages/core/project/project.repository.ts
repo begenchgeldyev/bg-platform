@@ -2,7 +2,7 @@ import { desc, eq } from 'drizzle-orm';
 import { Injectable } from '../DIContainer';
 import { type Db, projects } from '../db';
 
-type Project = typeof projects.$inferSelect;
+export type Project = typeof projects.$inferSelect;
 
 export type ProjectInput = {
   name: string;

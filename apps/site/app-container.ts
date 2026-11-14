@@ -1,11 +1,11 @@
-import { Container, canAccess, db, ProjectsRepository, resolveEmail, sessionEmail } from '@bg/core';
+import { Container, db, ProjectsRepository, projectAccess } from '@bg/core';
 import { AdminController } from './admin/admin.controller';
 import { AskController } from './ask/ask.controller';
 import { loadCvText } from './ask/cv-knowledge';
 import { createAskModel } from './ask/model-config';
 import { AuthController } from './auth/auth.controller';
 import { createRateLimiter } from './http/rate-limit';
-import { type CanEditProjects, ProjectController } from './project/project.controller';
+import { ProjectController } from './project/project.controller';
 
 export const container = new Container();
 
@@ -13,24 +13,14 @@ container.registerFactory(ProjectsRepository, () => {
   return new ProjectsRepository(db);
 });
 
-// A visitor's page view must not pay for a policy lookup, and only a signed session can hold edit rights.
-const canEditProjects: CanEditProjects = async (req) => {
-  if (!resolveEmail(req)) {
-    return false;
-  }
-
-  return canAccess(req, { actions: 'update', resource: 'project' });
-};
-
 container.registerFactory(ProjectController, (c) => {
-  return new ProjectController(c.resolve(ProjectsRepository), canEditProjects);
+  return new ProjectController(c.resolve(ProjectsRepository), projectAccess);
 });
 
 container.registerFactory(AdminController, (c) => {
   return new AdminController({
     projectsRepository: c.resolve(ProjectsRepository),
-    canEditProjects,
-    sessionEmail,
+    projectAccess,
   });
 });
 

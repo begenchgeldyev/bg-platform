@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from 'bun:test';
+import { afterAll, describe, expect, spyOn, test } from 'bun:test';
 import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV4 } from 'ai/test';
 import { AskController } from '../ask/ask.controller';
@@ -42,26 +42,108 @@ function chatAgainstServer(limit: number, chatModel = model): AskChat {
   return createAskChat({ api: new URL('/api/ask', server.url).href });
 }
 
-function ask(chat: AskChat, question: string) {
-  return new Promise<{ texts: string[]; error?: string }>((resolve) => {
-    const texts: string[] = [];
-    chat.ask(question, {
-      onText: (text) => texts.push(text),
-      onDone: () => resolve({ texts }),
-      onError: (error) => resolve({ texts, error }),
-    });
-  });
+const streamHeaders = { 'Content-Type': 'text/event-stream', 'x-vercel-ai-ui-message-stream': 'v1' };
+function answerStream(text: string) {
+  return `${[
+    { type: 'start', messageId: crypto.randomUUID() },
+    { type: 'text-start', id: 'text' },
+    { type: 'text-delta', id: 'text', delta: text },
+    { type: 'text-end', id: 'text' },
+    { type: 'finish', finishReason: 'stop' },
+  ]
+    .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+    .join('')}data: [DONE]\n\n`;
 }
 
 describe('createAskChat', () => {
-  test('streams the answer and sends earlier turns with the next question', async () => {
+  test.each([
+    'empty',
+    'whitespace',
+    'malformed',
+    'unfinished',
+  ])('%s completion is unavailable, rolls back only the failed turn and releases the lock', async (failure) => {
+    const requests: { messages: { role: string; parts: { text: string }[] }[] }[] = [];
+    const server = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        requests.push(await req.json());
+        if (requests.length !== 2) return new Response(answerStream('Completed.'), { headers: streamHeaders });
+        if (failure === 'unfinished')
+          return new Response(answerStream('PRIVATE partial').replace(/data: \{"type":"finish"[^\n]+\n\n/, ''), { headers: streamHeaders });
+        return new Response(
+          failure === 'malformed' ? 'data: {PRIVATE invalid json}\n\n' : answerStream(failure === 'empty' ? '' : ' \n '),
+          { headers: streamHeaders },
+        );
+      },
+    });
+    servers.push(server);
+    const chat = createAskChat({ api: new URL('/api/ask', server.url).href });
+    expect(await chat.ask('Keep this successful turn')).toEqual({ ok: true, text: 'Completed.' });
+    expect(await chat.ask('Discard this failed turn')).toEqual({ ok: false, reason: 'unavailable' });
+    expect(chat.busy()).toBe(false);
+    expect(await chat.ask('Retry')).toEqual({ ok: true, text: 'Completed.' });
+    expect(requests[2].messages.map((message) => message.role)).toEqual(['user', 'assistant', 'user']);
+    expect(requests[2].messages.map((message) => message.parts[0].text)).toEqual(['Keep this successful turn', 'Completed.', 'Retry']);
+  });
+
+  test('rejected transport is unavailable, releases the lock and preserves successful history', async () => {
     const chat = chatAgainstServer(10);
-    const first = await ask(chat, 'What does Begench do?');
-    expect(first.error).toBeUndefined();
-    expect(first.texts.at(-1)).toBe('Begench builds web apps.');
-    expect(first.texts).toContain('Begench builds ');
-    await ask(chat, 'Since when?');
+    expect(await chat.ask('Keep this turn')).toEqual({ ok: true, text: 'Begench builds web apps.' });
+    // Reject at the network boundary, not in Bun.serve's response writer (which
+    // Bun correctly reports as an unhandled fixture error).
+    const fetchSpy = spyOn(globalThis, 'fetch').mockRejectedValueOnce(new TypeError('PRIVATE fetch failure'));
+    try {
+      expect(await chat.ask('Discard this turn')).toEqual({ ok: false, reason: 'unavailable' });
+      expect(chat.busy()).toBe(false);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+    expect(await chat.ask('Retry')).toEqual({ ok: true, text: 'Begench builds web apps.' });
+    expect(model.doStreamCalls.at(-1)?.prompt.map((message) => message.role)).toEqual(['system', 'user', 'assistant', 'user']);
+    expect(JSON.stringify(model.doStreamCalls.at(-1)?.prompt)).not.toContain('Discard this turn');
+  });
+
+  test('concurrent calls return busy without settling, sending or changing the active turn history', async () => {
+    let release!: () => void;
+    let started!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const received = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const requests: { messages: { parts: { text: string }[] }[] }[] = [];
+    const server = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        requests.push(await req.json());
+        started();
+        if (requests.length === 1) await gate;
+        return new Response(answerStream('Active answer.'), { headers: streamHeaders });
+      },
+    });
+    servers.push(server);
+    const chat = createAskChat({ api: new URL('/api/ask', server.url).href });
+    const active = chat.ask('Active question');
+    expect(chat.busy()).toBe(true);
+    await received;
+    expect(await chat.ask('Do not send')).toEqual({ ok: false, reason: 'busy' });
+    expect(chat.busy()).toBe(true);
+    expect(requests).toHaveLength(1);
+    release();
+    expect(await active).toEqual({ ok: true, text: 'Active answer.' });
+    expect(chat.busy()).toBe(false);
+    await chat.ask('Follow-up');
+    expect(requests[1].messages.map((message) => message.parts[0].text)).toEqual(['Active question', 'Active answer.', 'Follow-up']);
+  });
+
+  test('returns one completed answer and sends earlier turns with the next question', async () => {
+    const chat = chatAgainstServer(10);
+    expect(await chat.ask('What does Begench do?')).toEqual({ ok: true, text: 'Begench builds web apps.' });
+    expect(chat.busy()).toBe(false);
+    await chat.ask('Since when?');
     expect(model.doStreamCalls.at(-1)?.prompt.map((entry) => entry.role)).toEqual(['system', 'user', 'assistant', 'user']);
+    expect(model.doStreamCalls.at(-1)?.prompt[2]?.content).toEqual([{ type: 'text', text: 'Begench builds web apps.' }]);
   });
 
   test('drops a turn that failed mid-stream so the next question starts from a clean history', async () => {
@@ -98,27 +180,24 @@ describe('createAskChat', () => {
       ],
     });
     const chat = chatAgainstServer(10, flaky);
-    const failed = await ask(chat, 'first');
-    expect(failed.error).toBe('the assistant is unavailable');
-    const retried = await ask(chat, 'second');
-    expect(retried.texts.at(-1)).toBe('Recovered.');
+    expect(await chat.ask('first')).toEqual({ ok: false, reason: 'unavailable' });
+    expect(chat.busy()).toBe(false);
+    expect(await chat.ask('second')).toEqual({ ok: true, text: 'Recovered.' });
     expect(flaky.doStreamCalls[1].prompt.map((entry) => entry.role)).toEqual(['system', 'user']);
   });
 
   test('reports the safe rate-limit message and is ready for the next question', async () => {
     const chat = chatAgainstServer(1);
-    await ask(chat, 'first');
-    const failed = await ask(chat, 'second');
-    expect(failed.error).toBe('rate limit reached, try again in a few minutes');
+    await chat.ask('first');
+    expect(await chat.ask('second')).toEqual({ ok: false, reason: 'rate-limit' });
     expect(chat.busy()).toBe(false);
   });
 
   test('reports the safe question-length validation message and rolls back the failed turn', async () => {
     const chat = chatAgainstServer(10);
-    expect((await ask(chat, 'x'.repeat(501))).error).toBe('questions are limited to 500 characters');
+    expect(await chat.ask('x'.repeat(501))).toEqual({ ok: false, reason: 'question-length' });
     expect(chat.busy()).toBe(false);
-    const recovered = await ask(chat, 'A valid question');
-    expect(recovered.error).toBeUndefined();
+    expect(await chat.ask('A valid question')).toEqual({ ok: true, text: 'Begench builds web apps.' });
     expect(model.doStreamCalls.at(-1)?.prompt.map((entry) => entry.role)).toEqual(['system', 'user']);
   });
 
@@ -141,7 +220,8 @@ describe('createAskChat', () => {
       });
       servers.push(server);
       const chat = createAskChat({ api: new URL('/api/ask', server.url).href });
-      expect((await ask(chat, 'hello')).error).toBe('the assistant is unavailable');
+      expect(await chat.ask('hello')).toEqual({ ok: false, reason: 'unavailable' });
+      expect(chat.busy()).toBe(false);
     }
   });
 
@@ -176,7 +256,7 @@ describe('createAskChat', () => {
     const server = Bun.serve({ port: 0, fetch: () => Response.json({ error: 'SECRET <img src=x>' }, { status: 500 }) });
     servers.push(server);
     const chat = createAskChat({ api: new URL('/api/ask', server.url).href });
-    expect((await ask(chat, 'hello')).error).toBe('the assistant is unavailable');
+    expect(await chat.ask('hello')).toEqual({ ok: false, reason: 'unavailable' });
   });
 
   test('raw streamed provider errors stay generic even when their text matches a safe HTTP error', async () => {
@@ -190,7 +270,7 @@ describe('createAskChat', () => {
       });
       servers.push(server);
       const chat = createAskChat({ api: new URL('/api/ask', server.url).href });
-      expect((await ask(chat, 'hello')).error).toBe('the assistant is unavailable');
+      expect(await chat.ask('hello')).toEqual({ ok: false, reason: 'unavailable' });
     }
   });
 });
