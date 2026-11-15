@@ -1,0 +1,6 @@
+[Unit]
+Description=Rotate syslog with bounded retention
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/logrotate --state /var/lib/logrotate/syslog-bounded.status /etc/logrotate-syslog.conf

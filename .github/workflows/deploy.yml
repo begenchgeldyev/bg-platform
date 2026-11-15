@@ -71,6 +71,29 @@ jobs:
                 echo 'Provision the production Git checkout before deploying.' >&2
                 exit 1
               }
+              # Inline: a full filesystem must fail before Git can fetch any helper.
+              check_deploy_storage() {
+                local path="$1" required_kib=1048576 required_inodes=1024
+                local mode available available_kib available_inodes
+                for mode in -Pk -Pi; do
+                  if ! available=$(LC_ALL=C df "$mode" "$path" | awk '
+                    NR == 2 && NF >= 6 && $4 ~ /^[0-9]+$/ { available = $4 }
+                    END { if (NR != 2 || available == "") exit 1; print available }
+                  '); then
+                    echo "Deployment storage preflight failed: cannot measure valid available storage with df $mode for $path; require $required_kib KiB (1 GiB) and $required_inodes free inodes. Check the filesystem and free space/inodes safely before retrying; no automatic cleanup is performed." >&2
+                    return 1
+                  fi
+                  if [[ "$mode" == -Pk ]]; then available_kib="$available"; else available_inodes="$available"; fi
+                done
+                echo "Deployment storage at $path: $available_kib KiB and $available_inodes free inodes; require $required_kib KiB (1 GiB) and $required_inodes free inodes."
+                if ! awk -v kib="$available_kib" -v inodes="$available_inodes" \
+                  -v required_kib="$required_kib" -v required_inodes="$required_inodes" \
+                  'BEGIN { exit !(kib >= required_kib && inodes >= required_inodes) }'; then
+                  echo 'Deployment storage preflight failed: free space/inodes safely before retrying; no automatic cleanup is performed.' >&2
+                  return 1
+                fi
+              }
+              check_deploy_storage "$REPO"
               cd "$REPO"
               docker info >/dev/null
               docker compose version

@@ -1,0 +1,11 @@
+[Unit]
+Description=Check syslog rotation hourly
+
+[Timer]
+OnCalendar=hourly
+AccuracySec=1min
+Persistent=true
+Unit=syslog-logrotate.service
+
+[Install]
+WantedBy=timers.target
