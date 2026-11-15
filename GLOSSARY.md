@@ -11,8 +11,15 @@ The owner's professional summary for prospective employers, presented as a web p
 _Avoid_: CV, curriculum vitae
 
 **Project**:
-One entry in the portfolio catalog: a name, and optionally a description, a body, an image, an icon and tags. Only the name is required.
+One entry in the portfolio catalog: a name, and optionally a description, a body, an image, an icon, tags, a GitHub repository link and a Live app link. Only the name is required.
 _Avoid_: entry, portfolio entry, work, works, item
+
+**GitHub repository link**:
+The destination for a project's source repository on GitHub. Separate from the project's page on this portfolio.
+
+**Live app link**:
+The destination for a project's running application. Optional even when a GitHub repository link exists, and separate from its portfolio page.
+_Avoid_: live project page (when referring to the portfolio page)
 
 **Hidden**:
 A project the owner has switched off. A hidden project is absent from the public list and JSON, and its page answers 404. The admin form shows the inverse of this flag as a visibility toggle, so "published" means "not hidden".
