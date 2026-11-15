@@ -187,6 +187,37 @@ describe('ProjectController.getPageById', () => {
     expect(subject.repository.updates).toEqual([]);
   });
 
+  test.each([
+    { lang: 'en', canEdit: false },
+    { lang: 'ru', canEdit: false },
+    { lang: 'en', canEdit: true },
+    { lang: 'ru', canEdit: true },
+  ])('places a name-only path heading above the back link and grid ($lang, editor=$canEdit)', async ({ lang, canEdit }) => {
+    const subject = controller({ projects: [project({ name: 'MiXeD ПроЕкт ЁЖ — v2.0', description: 'Keep this description.' })], canEdit });
+    const html = await (
+      await subject.controller.getPageById(new Request('http://localhost/projects/1', { headers: { cookie: `lang=${lang}` } }), 1)
+    ).text();
+    const main = html.match(/<main\b[^>]*>([\s\S]*?)<\/main>/)?.[1] ?? '';
+    const header = main.match(/^\s*(<header\b[\s\S]*?<\/header>)/)?.[1] ?? '';
+    expect(header).toMatch(/<span\b[^>]*aria-hidden="true"[^>]*>~\/project\/<\/span>/);
+    expect(main.match(/<h1\b/g)).toHaveLength(1);
+    expect(header.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/)?.[1]).toBe('MiXeD ПроЕкт ЁЖ — v2.0');
+    expect(header).toMatch(/<h1\b[^>]*data-project-field="name"[^>]*spellcheck="false"/);
+    expect(header).toMatch(/<\/h1>\s*<span\b[^>]*aria-hidden="true"[^>]*><\/span>/);
+    expect(header).not.toContain('uppercase');
+    expect(main.indexOf('</header>')).toBeLessThan(main.indexOf('href="/projects"'));
+    expect(main.indexOf('href="/projects"')).toBeLessThan(main.indexOf('<section'));
+    expect(main).toContain('Keep this description.');
+    expect(main).toContain('/projects/1');
+  });
+
+  test('keeps hostile name text escaped inside the editable heading, not as path markup', async () => {
+    const subject = controller({ projects: [project({ name: 'A & B </h1><script>evil()</script> "ЁЖ"' })], canEdit: true });
+    const html = await (await subject.controller.getPageById(new Request('http://localhost/projects/1'), 1)).text();
+    expect(html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/)?.[1]).toBe('A &amp; B &lt;/h1&gt;&lt;script&gt;evil()&lt;/script&gt; &quot;ЁЖ&quot;');
+    expect(html).not.toContain('<script>evil()');
+  });
+
   test("a hidden project's page is 404 for visitors and 200 for the owner", async () => {
     const visitor = controller({ projects: projectsWithHidden(), canEdit: false });
     const notFound = await visitor.controller.getPageById(new Request('http://localhost/projects/2'), 2);
