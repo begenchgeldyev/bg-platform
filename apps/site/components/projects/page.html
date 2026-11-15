@@ -1,4 +1,9 @@
-<main class="max-w-6xl mx-auto px-8 py-20 min-h-screen">
+<main class="max-w-6xl mx-auto px-5 sm:px-8 py-12 md:py-16 min-h-screen">
+  <header class="projects-header project-path-header" {{headerEditableAttrs}}>
+    <span aria-hidden="true">~/project/</span>
+    <h1 data-project-field="name" class="outline-none" spellcheck="false">{{ projectName }}</h1>
+    <span class="projects-header-cursor" aria-hidden="true"></span>
+  </header>
   <div class="mb-10">
     <a
       href="/projects"
@@ -11,15 +16,9 @@
   <section class="grid grid-cols-1 gap-8 lg:grid-cols-12">
     <div class="lg:col-span-8 space-y-8">
       <div class="border border-outline-variant/30 bg-surface-container-lowest/60 p-8" {{headerEditableAttrs}}>
-        <h1
-          data-project-field="name"
-          class="text-4xl md:text-6xl font-headline font-bold uppercase tracking-tighter text-white outline-none"
-          spellcheck="false">
-          {{ projectName }}
-        </h1>
         <p
           data-project-field="description"
-          class="mt-5 max-w-3xl font-mono text-base leading-8 text-on-surface-variant outline-none"
+          class="max-w-3xl font-mono text-base leading-8 text-on-surface-variant outline-none"
           spellcheck="false">
           {{ description }}
         </p>

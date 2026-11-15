@@ -23,12 +23,18 @@ describe('canonical resume', () => {
     const html = await (res as Response).text();
     expect(html).toContain('href="/resume" aria-current="page"');
     expect(html).toContain(`>${label}<`);
-    expect(html).toMatch(/<h1\b[^>]*>Begench Geldyev<\/h1>/);
-    expect(html).toContain(`[${label}]`);
+    expect(html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/g)).toHaveLength(1);
+    expect(html).toMatch(/<h1\b[^>]*>resume<\/h1>/);
+    expect(html).not.toContain(`[${label}]`);
+    expect(html).not.toContain('Software Engineer · Web Developer · Vim Enjoyer');
     const pageHeader = html.match(/<main\b[^>]*>\s*(<header\b[\s\S]*?<\/header>)/)?.[1] ?? '';
-    expect(pageHeader).toContain(download);
-    expect(pageHeader).toContain(`href="${RESUME_PDF}"`);
-    expect(pageHeader).toMatch(/<a\b[^>]*\bdownload\b[^>]*>/);
+    expect(pageHeader).toMatch(/<span\b[^>]*aria-hidden="true"[^>]*>~\/<\/span>/);
+    expect(pageHeader).not.toContain('<a');
+    const downloadRow = html.match(/<\/header>\s*(<div\b[^>]*>\s*<a\b[\s\S]*?<\/a>\s*<\/div>)/)?.[1] ?? '';
+    expect(downloadRow).toContain(download);
+    expect(downloadRow).toContain(`href="${RESUME_PDF}"`);
+    expect(downloadRow).toMatch(/<a\b[^>]*\bdownload\b[^>]*>/);
+    expect(downloadRow).toContain('target="_blank"');
     expect(html).not.toContain('<!-- missing:');
     expect(html).not.toContain('{{');
     expect(html).not.toContain('href="/cv"');
@@ -73,6 +79,26 @@ describe('canonical resume', () => {
       if (previous === undefined) delete process.env.NODE_ENV;
       else process.env.NODE_ENV = previous;
     }
+  });
+});
+
+describe('Logs path heading', () => {
+  test.each([
+    { lang: 'en', loading: 'Fetching posts...', intro: 'Thoughts on life, technology, and engineering.' },
+    { lang: 'ru', loading: 'Загружаю посты...', intro: 'Мысли о жизни, технологиях и инженерии.' },
+  ] as const)('replaces the old introduction without removing the fetch state ($lang)', async ({ lang, loading, intro }) => {
+    const response = await renderPage('/logs', lang);
+    expect(response?.status).toBe(200);
+    const html = await (response as Response).text();
+    expect(html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/g)).toHaveLength(1);
+    expect(html).toMatch(/<h1\b[^>]*>logs<\/h1>/);
+    const header = html.match(/<main\b[^>]*>\s*(?:<!--[\s\S]*?-->\s*)?(<header\b[\s\S]*?<\/header>)/)?.[1] ?? '';
+    expect(header).toMatch(/<span\b[^>]*aria-hidden="true"[^>]*>~\/<\/span>/);
+    for (const removed of ['[BLOG ACTIVE]', 'My_Reflections', intro]) expect(html).not.toContain(removed);
+    expect(html).toContain('curl -s /api/logs | jq .');
+    expect(html).toContain('id="logs-container"');
+    expect(html).toContain('hx-get="/api/logs"');
+    expect(html).toContain(loading);
   });
 });
 
