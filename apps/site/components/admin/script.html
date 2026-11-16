@@ -73,6 +73,8 @@
   const formTags = document.getElementById('admin-form-tags');
   const tagsPreview = document.getElementById('admin-tags-preview');
   const formContent = document.getElementById('admin-form-content');
+  const formGithubUrl = document.getElementById('admin-form-github-url');
+  const formLiveUrl = document.getElementById('admin-form-live-url');
   const iconGrid = document.getElementById('admin-icon-grid');
   const selectedIconText = document.getElementById('admin-selected-icon-text');
 
@@ -285,6 +287,8 @@
     if (formDescription) formDescription.value = proj.description || '';
     if (formTags) formTags.value = (proj.tags || []).join(', ');
     if (formContent) formContent.value = proj.content || '';
+    resetDestination(formGithubUrl, proj.githubUrl);
+    resetDestination(formLiveUrl, proj.liveUrl);
 
     if (editorModeBadge) {
       editorModeBadge.textContent = `[MODE: EDITING #${proj.id}]`;
@@ -315,6 +319,8 @@
     if (formDescription) formDescription.value = '';
     if (formTags) formTags.value = '';
     if (formContent) formContent.value = '';
+    resetDestination(formGithubUrl, null);
+    resetDestination(formLiveUrl, null);
 
     if (editorModeBadge) {
       editorModeBadge.textContent = '[MODE: NEW PROJECT]';
@@ -381,6 +387,78 @@
     formTags.addEventListener('input', updateTagsPreview);
   }
 
+  function resetDestination(input, value) {
+    if (!input) return;
+    input.value = value || '';
+    input.setCustomValidity('');
+  }
+
+  // Immediate feedback only; the server independently validates every submitted URL.
+  function hasUrlControl(value) {
+    return [...value].some(
+      (character) => character.charCodeAt(0) < 32 || (character.charCodeAt(0) >= 127 && character.charCodeAt(0) <= 159),
+    );
+  }
+
+  function validateDestination(input, github) {
+    if (!input) return true;
+    const raw = input.value;
+    const value = raw.trim();
+    let message = '';
+    if (hasUrlControl(raw)) message = 'Remove control characters from the URL.';
+    else if (value.length > limits.maxUrlChars) message = `Use no more than ${limits.maxUrlChars} characters.`;
+    else if (value) {
+      try {
+        // Inspect decoded Unicode, not individual percent bytes: Cyrillic UTF-8 can
+        // contain continuation bytes in the C1 range. Never rewrite the saved URL.
+        const decoded = decodeURIComponent(value);
+        const url = new URL(value);
+        const absolute = /^https?:\/\/([^/?#]+)([^?#]*)/i.exec(value);
+        const segments = (absolute?.[2] || '').split('/').slice(1);
+        if (hasUrlControl(decoded)) {
+          message = 'Remove encoded control characters from the URL.';
+        } else if (
+          !absolute ||
+          absolute[1].includes('@') ||
+          /\s|\\|%(?![\da-f]{2})/i.test(value) ||
+          !['http:', 'https:'].includes(url.protocol) ||
+          !url.hostname ||
+          url.username ||
+          url.password
+        ) {
+          message = 'Use an absolute HTTP or HTTPS URL without a username or password.';
+        } else if (
+          github &&
+          (url.protocol !== 'https:' ||
+            url.hostname !== 'github.com' ||
+            url.port ||
+            !segments[0] ||
+            !segments[1] ||
+            !/^[\w.-]+$/.test(segments[0]) ||
+            !/^[\w.-]+$/.test(segments[1]) ||
+            segments.some((segment) => /^(?:\.|%2e){1,2}$/i.test(segment)))
+        ) {
+          message = 'Use an HTTPS github.com URL with an owner and repository, for example https://github.com/owner/repository.';
+        }
+      } catch {
+        message = 'Enter a complete URL with valid UTF-8 percent encoding, for example https://example.com.';
+      }
+    }
+    input.setCustomValidity(message);
+    if (message) {
+      showStatus(message, true);
+      input.reportValidity();
+      input.focus();
+      return false;
+    }
+    input.value = value;
+    return true;
+  }
+
+  [formGithubUrl, formLiveUrl].forEach((input) => {
+    input?.addEventListener('input', () => input.setCustomValidity(''));
+  });
+
   async function handleSave() {
     if (inFlight) return;
     const targetId = currentProjectId;
@@ -391,6 +469,9 @@
       if (formName) formName.focus();
       return;
     }
+
+    if (!validateDestination(formGithubUrl, true) || !validateDestination(formLiveUrl, false)) return;
+    if (!document.getElementById('admin-project-form').reportValidity()) return;
 
     const rawTags = formTags ? formTags.value : '';
     const tags = rawTags
@@ -406,6 +487,8 @@
       icon: currentIcon,
       image: currentImage || null,
       isHidden: Boolean(formHidden?.checked),
+      githubUrl: formGithubUrl?.value?.trim() || null,
+      liveUrl: formLiveUrl?.value?.trim() || null,
     };
 
     inFlight = true;

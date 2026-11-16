@@ -15,6 +15,8 @@ const initial: Project = {
   description: 'Saved description',
   content: '<p>Saved content</p>',
   image: null,
+  githubUrl: null,
+  liveUrl: null,
   isHidden: false,
   icon: 'database',
   tags: ['Bun'],
@@ -163,7 +165,7 @@ try {
         await f.page.waitForFunction(() =>
           /failed|unable|invalid|error|^no$/i.test(document.getElementById('project-admin-status')?.textContent || ''),
         );
-        assert.equal(await f.page.locator('[data-project-visibility]').textContent(), 'Published');
+        assert.equal(await f.page.locator('#project-visibility-toggle').textContent(), 'Hide Project');
         assert.equal(await content.textContent(), 'Unsaved body');
         assert.deepEqual(f.requests[0]?.body, { isHidden: true });
         await f.page.locator('#project-upload-input').setInputFiles(image);
@@ -181,7 +183,7 @@ try {
         assert.equal(await content.textContent(), 'Unsaved body');
         await content.press('Escape');
         assert.equal(await content.innerHTML(), '<p>Saved content</p>');
-        assert.equal(await f.page.locator('[data-project-visibility]').textContent(), 'Hidden');
+        assert.equal(await f.page.locator('#project-visibility-toggle').textContent(), 'Publish Project');
         f.handle((route) =>
           route.fulfill({ status: 200, json: { project: { ...initial, isHidden: true, image: f.requests.at(-1)?.body?.image } } }),
         );
@@ -310,7 +312,7 @@ try {
       release();
       await status(f.page, 'inline', 'Image updated.');
       assert.equal(await content.textContent(), 'Unsaved body');
-      assert.equal(await f.page.locator('[data-project-visibility]').textContent(), 'Published');
+      assert.equal(await f.page.locator('#project-visibility-toggle').textContent(), 'Hide Project');
       await content.press('Escape');
       assert.ok((await f.page.locator('[data-project-preview]').getAttribute('src'))?.startsWith('data:'));
       assert.deepEqual(f.errors, []);
@@ -342,7 +344,7 @@ try {
       assert.deepEqual(f.requests[0]?.body, { isHidden: true });
       release();
       await status(f.page, 'inline', 'Project published.');
-      assert.equal(await f.page.locator('[data-project-visibility]').textContent(), 'Published');
+      assert.equal(await f.page.locator('#project-visibility-toggle').textContent(), 'Hide Project');
       assert.equal(await content.textContent(), 'Unsaved body');
       assert.deepEqual(f.errors, []);
     } finally {

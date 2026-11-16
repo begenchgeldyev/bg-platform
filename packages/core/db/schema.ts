@@ -7,6 +7,8 @@ export const projects = pgTable('projects', {
   description: text('description'),
   content: text('content'),
   image: text('image'),
+  githubUrl: text('github_url'),
+  liveUrl: text('live_url'),
   isHidden: boolean('is_hidden').notNull().default(false),
   icon: text('icon'),
   tags: text('tags').array().notNull().default(sql`'{}'::text[]`),

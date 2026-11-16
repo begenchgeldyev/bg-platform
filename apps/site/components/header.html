@@ -1,15 +1,15 @@
-<header class="projects-header">
-  <span aria-hidden="true">~/</span>
-  <h1>resume</h1>
-  <span class="projects-header-cursor" aria-hidden="true"></span>
-</header>
-<div class="flex justify-end mb-12">
+<header class="projects-header resume-header">
+  <div class="resume-heading">
+    <span aria-hidden="true">~/</span>
+    <h1>resume</h1>
+    <span class="projects-header-cursor" aria-hidden="true"></span>
+  </div>
   <a
     href="/public/Begench-Geldyev-Resume.pdf"
     download
     target="_blank"
-    class="flex items-center gap-2 px-6 py-3 border border-outline text-white font-mono text-xs uppercase hover:border-primary-container hover:text-primary-container transition-all self-end shrink-0">
-    <span class="material-symbols-outlined text-sm">download</span>
+    class="inline-flex items-center gap-2 min-h-11 px-4 py-3 border border-outline text-white font-mono text-xs uppercase tracking-normal hover:border-primary-container hover:text-primary-container transition-colors shrink-0">
+    <span class="material-symbols-outlined text-sm" aria-hidden="true">download</span>
     {{ downloadResume }}
   </a>
-</div>
+</header>

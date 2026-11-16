@@ -13,6 +13,8 @@ function project(overrides: Partial<Project> = {}): Project {
     isHidden: false,
     icon: null,
     tags: [],
+    githubUrl: null,
+    liveUrl: null,
     createdAt: new Date('2026-01-01T00:00:00Z'),
     updatedAt: new Date('2026-01-01T00:00:00Z'),
     ...overrides,
@@ -208,7 +210,7 @@ describe('ProjectController.getPageById', () => {
     expect(main.indexOf('</header>')).toBeLessThan(main.indexOf('href="/projects"'));
     expect(main.indexOf('href="/projects"')).toBeLessThan(main.indexOf('<section'));
     expect(main).toContain('Keep this description.');
-    expect(main).toContain('/projects/1');
+    expect(main).not.toContain('[METADATA]');
   });
 
   test('keeps hostile name text escaped inside the editable heading, not as path markup', async () => {
@@ -363,7 +365,17 @@ describe('ProjectController writes', () => {
 
     expect(response.status).toBe(201);
     expect(repository.created).toEqual([
-      { name: 'Demo', description: null, content: null, image: null, isHidden: false, icon: null, tags: ['Go'] },
+      {
+        name: 'Demo',
+        description: null,
+        content: null,
+        image: null,
+        isHidden: false,
+        icon: null,
+        tags: ['Go'],
+        githubUrl: null,
+        liveUrl: null,
+      },
     ]);
     expect(((await response.json()) as { project: Project }).project.name).toBe('Demo');
   });
@@ -434,6 +446,143 @@ describe('ProjectController writes', () => {
 
     expect(response.status).toBe(204);
     expect(await repository.findById(1)).toBeNull();
+  });
+});
+
+describe('project destination rendering', () => {
+  async function detail(item: Project, canEdit = false, lang = 'en') {
+    const subject = controller({ projects: [item], canEdit });
+    const response = await subject.controller.getPageById(
+      new Request('http://localhost/projects/1', { headers: { cookie: `lang=${lang}` } }),
+      1,
+    );
+    return { response, html: await response.text() };
+  }
+
+  test('renders both safe links with new-tab protections and escaped href values', async () => {
+    const { html } = await detail(project({ githubUrl: 'https://github.com/owner/repo', liveUrl: 'https://example.com/?a="quoted"&b=2' }));
+    const main = html.match(/<main\b[^>]*>([\s\S]*?)<\/main>/)?.[1] ?? '';
+    expect(main).toContain('[Links]');
+    expect(main).not.toContain('[METADATA]');
+    expect(main).not.toContain('Project ID');
+    expect(main).toContain('lg:grid-cols-12');
+    expect(main).toContain('lg:col-span-8');
+    expect(main).toContain('<aside');
+    const links = main.match(/<a\b[^>]*target="_blank"[^>]*>[\s\S]*?<\/a>/g) ?? [];
+    expect(links).toHaveLength(2);
+    for (const link of links) {
+      expect(link).toContain('rel="noopener noreferrer"');
+      expect(link).toContain('opens in a new tab');
+    }
+    expect(links.join('')).toContain('href="https://github.com/owner/repo"');
+    expect(links.join('')).toContain('href="https://example.com/?a=&quot;quoted&quot;&amp;b=2"');
+    expect(links.join('')).toContain('Live app');
+  });
+
+  test.each(['githubUrl', 'liveUrl'] as const)('renders one valid destination independently (%s)', async (field) => {
+    const { html } = await detail(project({ [field]: field === 'githubUrl' ? 'https://github.com/owner/repo' : 'http://example.com/app' }));
+    const aside = html.match(/<aside\b[\s\S]*?<\/aside>/)?.[0] ?? '';
+    expect(aside.match(/target="_blank"/g)).toHaveLength(1);
+    expect(aside).toContain('[Links]');
+  });
+
+  test.each([
+    '%80',
+    '%9F',
+    '%C2%80',
+    '%C2%9F',
+  ])('suppresses stored invalid UTF-8 or encoded C1 control %s independently', async (encoded) => {
+    for (const field of ['githubUrl', 'liveUrl'] as const) {
+      const base = field === 'githubUrl' ? 'https://github.com/owner/repo' : 'https://example.com';
+      const other = field === 'githubUrl' ? { liveUrl: 'https://example.com/safe' } : { githubUrl: 'https://github.com/owner/safe' };
+      for (const suffix of [`/${encoded}`, `?value=${encoded}`, `#${encoded}`]) {
+        const { html } = await detail(project({ ...other, [field]: base + suffix }));
+        const aside = html.match(/<aside\b[\s\S]*?<\/aside>/)?.[0] ?? '';
+        expect(aside.match(/target="_blank"/g)).toHaveLength(1);
+        expect(aside).not.toContain(encoded);
+        expect(aside).toContain(Object.values(other)[0] as string);
+      }
+    }
+    const { html } = await detail(
+      project({ githubUrl: `https://github.com/owner/repo/${encoded}`, liveUrl: `https://example.com/${encoded}` }),
+    );
+    expect(html).not.toContain('<aside');
+    expect(html).not.toContain('data-project-links');
+  });
+
+  test('renders valid encoded Cyrillic URLs unchanged in either language', async () => {
+    const encoded = '%D0%9F%D1%80%D0%BE%D0%B5%D0%BA%D1%82';
+    const destinations = { githubUrl: `https://github.com/owner/repo/${encoded}`, liveUrl: `https://example.com/${encoded}` };
+    for (const lang of ['en', 'ru']) {
+      const { html } = await detail(project(destinations), false, lang);
+      expect(html).toContain(`href="${destinations.githubUrl}"`);
+      expect(html).toContain(`href="${destinations.liveUrl}"`);
+    }
+  });
+
+  test('omits the public aside and desktop columns when neither destination is valid', async () => {
+    for (const destinations of [
+      {},
+      { githubUrl: 'javascript:alert(1)', liveUrl: 'https://user:password@example.com' },
+      { githubUrl: 'https://github.com/owner', liveUrl: 'https://example.com/\nunsafe' },
+    ]) {
+      const { html } = await detail(project(destinations));
+      const main = html.match(/<main\b[^>]*>([\s\S]*?)<\/main>/)?.[1] ?? '';
+      expect(main).not.toContain('<aside');
+      expect(main).not.toContain('data-project-links');
+      expect(main).not.toContain('[METADATA]');
+      expect(main).not.toContain('lg:grid-cols-12');
+      expect(main).not.toContain('lg:col-span-8');
+      expect(main).not.toContain('javascript:');
+      expect(main).not.toContain('password@example.com');
+    }
+  });
+
+  test('suppresses unsafe DB values independently, retains owner controls with no links, and localizes labels', async () => {
+    const { html } = await detail(project({ githubUrl: 'https://evil.test/owner/repo', liveUrl: 'https://example.com/' }), false, 'ru');
+    expect(html).not.toContain('evil.test');
+    expect(html).toContain('[Ссылки]');
+    expect(html).toContain('Открыть приложение');
+    expect(html).toContain('откроется в новой вкладке');
+    const { html: owner } = await detail(project(), true);
+    expect(owner).toContain('<aside');
+    expect(owner).toContain('lg:grid-cols-12');
+    expect(owner).toContain('id="project-upload-trigger"');
+    expect(owner).toContain('id="project-visibility-toggle"');
+    expect(owner).not.toContain('data-project-links');
+    expect(owner).not.toContain('[METADATA]');
+    const { response, html: hidden } = await detail(project({ isHidden: true, githubUrl: 'https://github.com/owner/repo' }));
+    expect(response.status).toBe(404);
+    expect(hidden).not.toContain('github.com');
+  });
+});
+
+describe('project destination persistence', () => {
+  test('POST stores trimmed destinations and PATCH preserves omissions then clears fields', async () => {
+    const { controller: subject, repository } = controller({ canEdit: true });
+    const response = await subject.post(
+      jsonWrite({ name: 'Demo', githubUrl: ' https://github.com/owner/repo ', liveUrl: ' https://example.com/ ' }),
+    );
+    expect(response.status).toBe(201);
+    const created = ((await response.json()) as { project: Project }).project;
+    expect(repository.created[0]).toMatchObject({ githubUrl: 'https://github.com/owner/repo', liveUrl: 'https://example.com/' });
+    await subject.patch(jsonWrite({ name: 'Renamed' }, { method: 'PATCH', id: created.id }), created.id);
+    expect(repository.updates[0]?.changes).toEqual({ name: 'Renamed' });
+    expect(await repository.findById(created.id)).toMatchObject({
+      githubUrl: 'https://github.com/owner/repo',
+      liveUrl: 'https://example.com/',
+    });
+    await subject.patch(jsonWrite({ githubUrl: null, liveUrl: ' ' }, { method: 'PATCH', id: created.id }), created.id);
+    expect(await repository.findById(created.id)).toMatchObject({ githubUrl: null, liveUrl: null });
+  });
+
+  test('POST and PATCH reject invalid destinations before writing', async () => {
+    for (const body of [{ githubUrl: 'https://github.com/owner' }, { liveUrl: 'javascript:alert(1)' }]) {
+      const { controller: subject, repository } = controller({ projects: [project()], canEdit: true });
+      expect((await subject.post(jsonWrite({ name: 'Demo', ...body }))).status).toBe(400);
+      expect((await subject.patch(jsonWrite(body, { method: 'PATCH', id: 1 }), 1)).status).toBe(400);
+      expect(repository.calls).toEqual([]);
+    }
   });
 });
 

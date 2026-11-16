@@ -29,6 +29,8 @@ function fixtureProject(id: number, name: string, base: string, content: string 
     description: `${name} fixture description`,
     content,
     image: `${base}.png`,
+    githubUrl: null,
+    liveUrl: null,
     isHidden: false,
     icon: 'terminal',
     tags: [],

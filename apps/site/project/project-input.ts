@@ -1,5 +1,6 @@
 import type { ProjectInput } from '@bg/core';
 import { PROJECT_ICONS } from './project-icons';
+import { PROJECT_URL_MAX_CHARS, parseProjectUrl } from './project-links';
 
 export const PROJECT_LIMITS = {
   maxBodyBytes: 4 * 1024 * 1024,
@@ -9,6 +10,7 @@ export const PROJECT_LIMITS = {
   maxContentChars: 100_000,
   maxTags: 12,
   maxTagChars: 40,
+  maxUrlChars: PROJECT_URL_MAX_CHARS,
 } as const;
 
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -132,6 +134,10 @@ export function parseNewProject(body: unknown): ParseResult<ProjectInput> {
   if (!tags.ok) return tags;
   const isHidden = parseIsHidden(read(record, 'isHidden'));
   if (!isHidden.ok) return isHidden;
+  const githubUrl = parseProjectUrl(read(record, 'githubUrl'), 'githubUrl');
+  if (!githubUrl.ok) return githubUrl;
+  const liveUrl = parseProjectUrl(read(record, 'liveUrl'), 'liveUrl');
+  if (!liveUrl.ok) return liveUrl;
 
   return {
     ok: true,
@@ -143,6 +149,8 @@ export function parseNewProject(body: unknown): ParseResult<ProjectInput> {
       isHidden: isHidden.value,
       icon: icon.value,
       tags: tags.value,
+      githubUrl: githubUrl.value,
+      liveUrl: liveUrl.value,
     },
   };
 }
@@ -193,6 +201,13 @@ export function parseProjectChanges(body: unknown): ParseResult<Partial<ProjectI
     const isHidden = parseIsHidden(read(record, 'isHidden'));
     if (!isHidden.ok) return isHidden;
     changes.isHidden = isHidden.value;
+  }
+
+  for (const field of ['githubUrl', 'liveUrl'] as const) {
+    if (!Object.hasOwn(record, field)) continue;
+    const url = parseProjectUrl(read(record, field), field);
+    if (!url.ok) return url;
+    changes[field] = url.value;
   }
 
   if (Object.keys(changes).length === 0) return { ok: false, error: 'nothing to update' };

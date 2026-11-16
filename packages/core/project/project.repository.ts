@@ -9,6 +9,8 @@ export type ProjectInput = {
   description: string | null;
   content: string | null;
   image: string | null;
+  githubUrl: string | null;
+  liveUrl: string | null;
   isHidden: boolean;
   icon: string | null;
   tags: string[];

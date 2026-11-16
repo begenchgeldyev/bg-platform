@@ -1,8 +1,7 @@
+<!-- biome-ignore format: Inline path whitespace is visible; retain exact slash/name and cursor spacing. -->
 <main class="max-w-6xl mx-auto px-5 sm:px-8 py-12 md:py-16 min-h-screen">
   <header class="projects-header project-path-header" {{headerEditableAttrs}}>
-    <span aria-hidden="true">~/project/</span>
-    <h1 data-project-field="name" class="outline-none" spellcheck="false">{{ projectName }}</h1>
-    <span class="projects-header-cursor" aria-hidden="true"></span>
+    <span aria-hidden="true">~/project/</span><h1 data-project-field="name" class="outline-none" spellcheck="false">{{ projectName }}</h1><span class="projects-header-cursor" aria-hidden="true"></span>
   </header>
   <div class="mb-10">
     <a
@@ -13,8 +12,8 @@
     </a>
   </div>
 
-  <section class="grid grid-cols-1 gap-8 lg:grid-cols-12">
-    <div class="lg:col-span-8 space-y-8">
+  <section class="grid grid-cols-1 gap-8 {{ projectHasSidebar }}">
+    <div class="min-w-0 space-y-8 {{ projectContentColumns }}">
       <div class="border border-outline-variant/30 bg-surface-container-lowest/60 p-8" {{headerEditableAttrs}}>
         <p
           data-project-field="description"
@@ -41,35 +40,6 @@
       {{ editor }}
     </div>
 
-    <aside class="lg:col-span-4">
-      <div class="sticky top-28 space-y-6 border border-outline-variant/30 bg-surface-container-lowest/60 p-6">
-        <div>
-          <div class="font-mono text-xs uppercase tracking-[0.2em] text-primary-container">[METADATA]</div>
-        </div>
-        {{ adminControls }}
-        <div class="space-y-4">
-          <div class="border border-outline-variant/20 bg-background/60 p-4">
-            <div class="font-mono text-[11px] uppercase tracking-[0.18em] text-on-surface-variant">Project ID</div>
-            <div class="mt-2 font-mono text-sm text-on-surface">#{{ projectId }}</div>
-          </div>
-          <div class="border border-outline-variant/20 bg-background/60 p-4">
-            <div class="font-mono text-[11px] uppercase tracking-[0.18em] text-on-surface-variant">Created</div>
-            <div class="mt-2 font-mono text-sm text-on-surface">{{ createdAt }}</div>
-          </div>
-          <div class="border border-outline-variant/20 bg-background/60 p-4">
-            <div class="font-mono text-[11px] uppercase tracking-[0.18em] text-on-surface-variant">Updated</div>
-            <div class="mt-2 font-mono text-sm text-on-surface">{{ updatedAt }}</div>
-          </div>
-          <div class="border border-outline-variant/20 bg-background/60 p-4">
-            <div class="font-mono text-[11px] uppercase tracking-[0.18em] text-on-surface-variant">Visibility</div>
-            <div data-project-visibility class="mt-2 font-mono text-sm text-on-surface">{{ visibility }}</div>
-          </div>
-          <div class="border border-outline-variant/20 bg-background/60 p-4">
-            <div class="font-mono text-[11px] uppercase tracking-[0.18em] text-on-surface-variant">Route</div>
-            <div class="mt-2 break-all font-mono text-sm text-on-surface">{{ route }}</div>
-          </div>
-        </div>
-      </div>
-    </aside>
+    {{ projectSidebarHtml }}
   </section>
 </main>

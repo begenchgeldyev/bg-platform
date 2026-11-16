@@ -120,6 +120,7 @@ export class AdminController {
       maxNameChars: PROJECT_LIMITS.maxNameChars,
       maxDescriptionChars: PROJECT_LIMITS.maxDescriptionChars,
       maxImageBytes: PROJECT_LIMITS.maxImageBytes,
+      maxUrlChars: PROJECT_LIMITS.maxUrlChars,
     }).replaceAll('<', '\\u003c');
     const maxImageMb = Math.round(PROJECT_LIMITS.maxImageBytes / (1024 * 1024));
     const script = await renderComponentTemplate('admin/script.html');
@@ -130,6 +131,7 @@ export class AdminController {
       maxDescriptionChars: String(PROJECT_LIMITS.maxDescriptionChars),
       maxImageMb: String(maxImageMb),
       maxNameChars: String(PROJECT_LIMITS.maxNameChars),
+      maxUrlChars: String(PROJECT_LIMITS.maxUrlChars),
       script,
     });
 

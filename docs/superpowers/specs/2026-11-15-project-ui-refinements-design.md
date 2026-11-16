@@ -31,9 +31,13 @@ behavior survives HTMX navigation without duplicated handlers.
 
 ### Project heading
 
-Render the name green and lowercase, visually joined to the prefix:
+Render the name lowercase, visually joined to the prefix:
 `~/project/pantheon`. Remove the gap after the slash, retaining the established
-cursor styling. Lowercase is presentation only: preserve stored names, route
+cursor styling. As clarified on November 16, both the project-detail prefix
+and name are light gray (`#f2f1f0`); the cursor remains green. Other page
+prefix colors are unchanged. All path headings have no prefix/name gap;
+retain 8px cursor spacing and 16px Resume action spacing.
+Lowercase is presentation only: preserve stored names, route
 identity and raw inline-edit/save values. Long and Cyrillic names wrap without
 truncation or horizontal overflow; decorative prefix/cursor stay outside the
 editable name.

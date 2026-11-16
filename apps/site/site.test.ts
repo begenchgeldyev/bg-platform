@@ -29,8 +29,8 @@ describe('canonical resume', () => {
     expect(html).not.toContain('Software Engineer · Web Developer · Vim Enjoyer');
     const pageHeader = html.match(/<main\b[^>]*>\s*(<header\b[\s\S]*?<\/header>)/)?.[1] ?? '';
     expect(pageHeader).toMatch(/<span\b[^>]*aria-hidden="true"[^>]*>~\/<\/span>/);
-    expect(pageHeader).not.toContain('<a');
-    const downloadRow = html.match(/<\/header>\s*(<div\b[^>]*>\s*<a\b[\s\S]*?<\/a>\s*<\/div>)/)?.[1] ?? '';
+    expect(pageHeader).toContain('resume-header');
+    const downloadRow = pageHeader;
     expect(downloadRow).toContain(download);
     expect(downloadRow).toContain(`href="${RESUME_PDF}"`);
     expect(downloadRow).toMatch(/<a\b[^>]*\bdownload\b[^>]*>/);
@@ -106,6 +106,10 @@ describe('home footer contacts', () => {
   test.each(['en', 'ru'] as const)('offers a clickable email and two social profiles without a duplicate download (%s)', async (lang) => {
     const response = await renderPage('/', lang);
     expect(response?.status).toBe(200);
+    const markup = await (response as Response).clone().text();
+    expect(markup).toContain('data-copy-email="begenchgeldyev@gmail.com"');
+    expect(markup).toContain('id="email-copy-status"');
+    expect(markup).toContain('/public/email-copy.js');
     const links: { href: string | null; text: string; target: string | null; rel: string | null }[] = [];
     let footerCount = 0;
     let footerText = '';
@@ -135,7 +139,6 @@ describe('home footer contacts', () => {
       .text();
     expect(footerCount).toBe(1);
     expect(links.map((link) => ({ ...link, text: link.text.trim() }))).toEqual([
-      { href: 'mailto:begenchgeldyev@gmail.com', text: 'begenchgeldyev@gmail.com', target: null, rel: null },
       { href: 'https://github.com/begenchgeldyev', text: 'GitHub', target: '_blank', rel: 'noopener noreferrer' },
       { href: 'https://linkedin.com/in/begench-geldyev', text: 'LinkedIn', target: '_blank', rel: 'noopener noreferrer' },
     ]);
@@ -282,7 +285,7 @@ describe('russian fragments', () => {
   test('serves Russian copy on the home page', async () => {
     const res = await renderPage('/', 'ru');
     const html = await (res as Response).text();
-    expect(html).toContain('aria-label="Статус сессии"');
+    expect(html).not.toContain('aria-label="Статус сессии"');
     expect(html).toContain('id="terminal-input"');
   });
 });
@@ -291,16 +294,16 @@ describe('home page', () => {
   test.each([
     { lang: 'en', label: 'Session status', tenure: 'shipping since 2021' },
     { lang: 'ru', label: 'Статус сессии', tenure: 'в проде с 2021' },
-  ] as const)('renders the final status bar and tenure badge ($lang)', async ({ lang, label, tenure }) => {
+  ] as const)('removes the metadata strip and preserves the tenure badge ($lang)', async ({ lang, label, tenure }) => {
     const res = await renderPage('/', lang);
     expect(res).not.toBeNull();
     const html = await (res as Response).text();
     const terminalStart = html.indexOf('id="terminal-wrap"');
     expect(terminalStart).toBeGreaterThan(-1);
     const terminal = html.slice(terminalStart, html.indexOf('</section>', terminalStart));
-    expect(terminal).toContain(`aria-label="${label}"`);
+    expect(terminal).not.toContain(`aria-label="${label}"`);
     for (const content of ['stack:', 'now:', 'pantheon', 'utc+7']) {
-      expect(terminal).toContain(content);
+      expect(terminal).not.toContain(content);
     }
     expect(html).toContain(tenure);
     for (const removed of ['Stats Grid', 'Availability', 'Окружение', 'prototype', 'herdr / opencode']) {

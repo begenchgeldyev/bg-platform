@@ -76,7 +76,7 @@
               href="#"
               target="_blank"
               class="hidden font-mono text-xs text-on-surface-variant hover:text-white hover:underline uppercase tracking-wider flex items-center gap-1">
-              <span>View live</span>
+              <span>View project page</span>
               <span class="material-symbols-outlined text-sm" aria-hidden="true">open_in_new</span>
             </a>
           </div>
@@ -134,6 +134,44 @@
               placeholder="Short summary displayed on project cards and page hero..."
               class="w-full bg-[#050505] border border-outline-variant/50 focus:border-outline focus:ring-1 focus:ring-outline/60 font-mono text-sm text-on-surface p-3 outline-none transition-all leading-relaxed"></textarea>
           </div>
+
+          <fieldset class="space-y-4">
+            <legend class="font-mono text-[11px] uppercase tracking-[0.18em] text-on-surface-variant mb-3">
+              External links (optional)
+            </legend>
+            <div class="space-y-2">
+              <label for="admin-form-github-url" class="block font-mono text-sm text-on-surface">GitHub repository</label>
+              <input
+                id="admin-form-github-url"
+                name="githubUrl"
+                type="url"
+                maxlength="{{ maxUrlChars }}"
+                autocomplete="off"
+                spellcheck="false"
+                aria-describedby="admin-github-help"
+                placeholder="https://github.com/owner/repository"
+                class="w-full bg-[#050505] border border-outline-variant/50 focus:border-outline focus:ring-1 focus:ring-outline/60 font-mono text-sm text-on-surface px-4 py-2.5 outline-none transition-all">
+              <p id="admin-github-help" class="font-mono text-xs text-on-surface-variant">
+                Use an HTTPS github.com repository URL. Leave blank to remove the link.
+              </p>
+            </div>
+            <div class="space-y-2">
+              <label for="admin-form-live-url" class="block font-mono text-sm text-on-surface">Live app</label>
+              <input
+                id="admin-form-live-url"
+                name="liveUrl"
+                type="url"
+                maxlength="{{ maxUrlChars }}"
+                autocomplete="off"
+                spellcheck="false"
+                aria-describedby="admin-live-help"
+                placeholder="https://example.com"
+                class="w-full bg-[#050505] border border-outline-variant/50 focus:border-outline focus:ring-1 focus:ring-outline/60 font-mono text-sm text-on-surface px-4 py-2.5 outline-none transition-all">
+              <p id="admin-live-help" class="font-mono text-xs text-on-surface-variant">
+                Use an HTTP or HTTPS URL without a username or password. Maximum {{ maxUrlChars }} characters.
+              </p>
+            </div>
+          </fieldset>
 
           <!-- Tags -->
           <div class="space-y-2">

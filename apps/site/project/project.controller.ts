@@ -5,23 +5,12 @@ import { renderComponentTemplate, renderDynamicPage } from '../site';
 import { type ProjectArt, projectArt } from './project-art';
 import { projectIcon } from './project-icons';
 import { PROJECT_LIMITS, parseNewProject, parseProjectChanges } from './project-input';
+import { parseProjectUrl } from './project-links';
 
 export type ProjectControllerRepository = Pick<ProjectsRepository, 'list' | 'findById' | 'create' | 'updateById' | 'deleteById'>;
 
 function escapeHtml(value: string) {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
-}
-
-function formatProjectDate(value: Date | null, lang: Lang) {
-  if (!value) {
-    return t(lang, 'dateUnknown');
-  }
-
-  return new Intl.DateTimeFormat(t(lang, 'dateLocale'), {
-    year: 'numeric',
-    month: 'short',
-    day: '2-digit',
-  }).format(value);
 }
 
 function serializeForScript(value: unknown) {
@@ -149,9 +138,6 @@ async function renderProjectPage(req: Request, project: Project, canEdit: boolea
   const lang = resolveLang(req);
   const description = project.description?.trim() || t(lang, 'projectNoDescription');
   const image = project.image?.trim();
-  const createdAt = formatProjectDate(project.createdAt, lang);
-  const updatedAt = formatProjectDate(project.updatedAt, lang);
-  const visibility = project.isHidden ? t(lang, 'visibilityHidden') : t(lang, 'visibilityPublished');
   const adminControls = canEdit
     ? `<div class="space-y-3 border border-primary-container/30 bg-primary-container/5 p-4">
         <div class="font-mono text-[11px] uppercase tracking-[0.18em] text-primary-container">[ADMIN]</div>
@@ -173,6 +159,27 @@ async function renderProjectPage(req: Request, project: Project, canEdit: boolea
         <div id="project-admin-status" class="font-mono text-xs text-on-surface-variant"></div>
       </div>`
     : '';
+  const projectLinksHtml = (
+    await Promise.all(
+      (['githubUrl', 'liveUrl'] as const).map(async (field) => {
+        const parsed = parseProjectUrl(project[field], field);
+        if (!parsed.ok || !parsed.value) return '';
+        return renderComponentTemplate('projects/link.html', {
+          href: escapeHtml(parsed.value),
+          label: escapeHtml(t(lang, field === 'githubUrl' ? 'projectGithubLink' : 'projectLiveLink')),
+          newTabLabel: escapeHtml(t(lang, 'externalNewTab')),
+        });
+      }),
+    )
+  ).join('');
+  const linksPanelHtml = projectLinksHtml
+    ? await renderComponentTemplate('projects/links.html', {
+        linksHeading: escapeHtml(t(lang, 'projectLinksHeading')),
+        linksHtml: projectLinksHtml,
+      })
+    : '';
+  const hasSidebar = Boolean(projectLinksHtml || canEdit);
+  const projectSidebarHtml = hasSidebar ? await renderComponentTemplate('projects/sidebar.html', { adminControls, linksPanelHtml }) : '';
   const art = projectArt(image);
   const previewAlt = `${escapeHtml(project.name)} preview`;
   // Known artwork has a 4:3 master; arbitrary uploads keep their own natural ratio.
@@ -185,21 +192,19 @@ async function renderProjectPage(req: Request, project: Project, canEdit: boolea
         <img data-project-preview class="max-h-[520px] w-full object-cover" src="" alt="${previewAlt}"/>
       </div>`;
   const contentHtml = await renderComponentTemplate('projects/page.html', {
-    adminControls,
+    projectLinksHtml,
+    projectSidebarHtml,
+    projectHasSidebar: hasSidebar ? 'lg:grid-cols-12' : '',
+    projectContentColumns: hasSidebar ? 'lg:col-span-8' : '',
     content: await renderContentHtml(project.content),
-    createdAt: escapeHtml(createdAt),
     description: escapeHtml(description),
     editor: canEdit ? `${await renderProjectEditor()}${await renderProjectEditorScript(project)}` : '',
     headerEditableAttrs: canEdit ? 'data-admin-editable="header"' : '',
     contentEditableAttrs: canEdit ? 'data-admin-editable="content"' : '',
     imageBlock,
     imageMotion: await renderComponentTemplate('projects/image-motion.html'),
-    projectId: String(project.id),
     projectName: escapeHtml(project.name),
-    route: `/projects/${project.id}`,
     tagsHtml: renderPlainTags(project.tags),
-    updatedAt: escapeHtml(updatedAt),
-    visibility: escapeHtml(visibility),
   });
 
   return renderDynamicPage(req, {

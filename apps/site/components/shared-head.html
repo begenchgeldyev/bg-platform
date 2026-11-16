@@ -115,7 +115,7 @@ button:focus-visible {
 .projects-header {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: 0;
   margin-bottom: 28px;
   padding-bottom: 22px;
   border-bottom: 1px solid #353535;
@@ -135,6 +135,7 @@ button:focus-visible {
 .projects-header-cursor {
   flex: none;
   align-self: center;
+  margin-left: 8px;
   width: 1ch;
   height: 1.1em;
   background: currentColor;
@@ -145,12 +146,56 @@ button:focus-visible {
   display: block;
   overflow-wrap: anywhere;
 }
+.project-path-header > span:not(.projects-header-cursor) {
+  color: inherit;
+}
 .project-path-header h1 {
   display: inline;
+  color: inherit;
+  text-transform: lowercase;
+}
+.project-path-header h1[contenteditable="true"] {
+  text-transform: none;
 }
 .project-path-header .projects-header-cursor {
   display: inline-block;
   vertical-align: -0.15em;
+}
+.resume-header {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+.resume-heading {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0;
+}
+.resume-heading > span {
+  color: var(--accent);
+}
+.email-copy-wrap {
+  position: relative;
+  min-width: 0;
+  max-width: 100%;
+}
+.email-copy-status {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  max-width: min(28rem, calc(100vw - 40px));
+  width: max-content;
+  padding: 6px 10px;
+  border: 1px solid var(--accent);
+  background: #0a0a0a;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 400;
+  pointer-events: none;
+}
+.email-copy-status:empty {
+  padding: 0;
+  border: 0;
 }
 @keyframes projects-cursor-blink {
   0%,

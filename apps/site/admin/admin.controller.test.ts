@@ -10,6 +10,8 @@ function project(overrides: Partial<Project> = {}): Project {
     description: null,
     content: null,
     image: null,
+    githubUrl: null,
+    liveUrl: null,
     isHidden: false,
     icon: null,
     tags: [],
@@ -212,10 +214,16 @@ describe('AdminController', () => {
       maxNameChars: PROJECT_LIMITS.maxNameChars,
       maxDescriptionChars: PROJECT_LIMITS.maxDescriptionChars,
       maxImageBytes: PROJECT_LIMITS.maxImageBytes,
+      maxUrlChars: 2048,
     });
 
     const maxImageMb = Math.round(PROJECT_LIMITS.maxImageBytes / (1024 * 1024));
     expect(html).toContain(`id="admin-form-name"`);
+    expect(html).toContain('id="admin-form-github-url"');
+    expect(html).toContain('id="admin-form-live-url"');
+    expect(html).toContain('maxlength="2048"');
+    expect(html).toContain('View project page');
+    expect(html).toContain('reportValidity()');
     expect(html).toContain(`maxlength="${PROJECT_LIMITS.maxNameChars}"`);
     expect(html).toContain(`maxlength="${PROJECT_LIMITS.maxDescriptionChars}"`);
     expect(html).toContain(`Max ${PROJECT_LIMITS.maxDescriptionChars} chars`);

@@ -27,6 +27,8 @@ await db
 const seedProjects = [
   {
     name: 'Interpreter',
+    githubUrl: null,
+    liveUrl: null,
     description:
       'A C++ interpreter for a custom programming language based on context-free grammar, LL(1) parsing, Reverse Polish Notation generation, and RPN execution.',
     content: `Interpreter is a C++ project that implements the core stages of a programming language interpreter for a custom language defined by context-free grammar. 
@@ -38,6 +40,8 @@ const seedProjects = [
   },
   {
     name: 'bg-platform',
+    githubUrl: null,
+    liveUrl: null,
     description: 'A Bun/TypeScript portfolio platform with HTMX, PostgreSQL, project administration, and an AI terminal.',
     content:
       '<p>A server-rendered personal portfolio built with Bun, TypeScript and HTMX.</p><p>Its editable PostgreSQL project catalog supports project administration, and the terminal uses the Vercel AI SDK for direct AI chat.</p><p>Source code: <a href="https://github.com/begenchgeldyev/bg-platform" target="_blank" rel="noopener noreferrer">GitHub — bg-platform</a></p>',
@@ -48,6 +52,8 @@ const seedProjects = [
   },
   {
     name: 'Pantheon',
+    githubUrl: null,
+    liveUrl: null,
     description: 'OpenClaw agents connected through Telegram, with reminders, daily standups, and reliability tooling.',
     content:
       '<p>An OpenClaw agent household connected through Telegram, with persona and workspace templates.</p><p>Per-agent reminder helpers, morning standup intake and a laptop helper support daily routines. Bash, Python and systemd tooling support reliability.</p><p>Source code: <a href="https://github.com/begenchgeldyev/pantheon" target="_blank" rel="noopener noreferrer">GitHub — Pantheon</a></p>',

@@ -297,7 +297,11 @@ async function renderHeader(config: LayoutConfig, lang: Lang) {
 
 async function renderFooter(config: LayoutConfig, lang: Lang) {
   if (config.footerVariant === 'home') {
-    return renderComponentTemplate('footer-home.html');
+    return renderComponentTemplate('footer-home.html', {
+      copyEmailLabel: t(lang, 'copyEmailLabel'),
+      copyEmailSuccess: t(lang, 'copyEmailSuccess'),
+      copyEmailFailure: t(lang, 'copyEmailFailure'),
+    });
   }
 
   const resumeLink = config.includeResumeLink

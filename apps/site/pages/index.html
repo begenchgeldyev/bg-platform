@@ -1,77 +1,75 @@
 <main class="min-h-screen flex flex-col items-center px-5 sm:px-6 relative">
-	<div class="max-w-6xl w-full space-y-12 md:space-y-16 z-10 py-12 md:py-16">
-		<!-- Hero Section -->
-		<div class="text-center space-y-6 max-w-5xl mx-auto">
-			<div class="flex flex-wrap justify-center gap-3 mb-4">
-				<span
-					class="font-mono text-primary-container bg-primary-container/10 px-3 py-1.5 text-sm border border-primary-container/30 uppercase tracking-wider">
-					based in tomsk
-				</span>
-				<span class="font-mono text-secondary bg-secondary/10 px-3 py-1.5 text-sm border border-secondary/30 uppercase tracking-wider">
-					shipping since 2021
-				</span>
-			</div>
-			<!--#include hero-role.html-->
-			<p class="text-lg md:text-[22px] font-body text-on-surface-variant max-w-[52ch] mx-auto leading-relaxed mt-6">
-				Building resilient, high-performance web systems with a focus on artisanal code and user-centric architecture.
-			</p>
-			<div class="pt-4 md:pt-6 flex flex-col sm:flex-row items-center justify-center gap-4">
-				<a
-					class="group relative inline-flex items-center justify-center gap-3 px-6 sm:px-8 py-4 bg-primary-container text-on-primary-container font-mono font-bold uppercase tracking-wider text-base hover:bg-white transition-all duration-300 w-full sm:w-auto text-center"
-					href="/projects">
-					View Portfolio
-					<span aria-hidden="true" class="material-symbols-outlined text-lg transition-transform group-hover:translate-x-1">arrow_forward</span>
-				</a>
-				<a
-					class="px-6 sm:px-8 py-4 border border-outline text-on-surface font-mono uppercase tracking-wider text-base hover:border-primary-container hover:text-primary-container transition-all w-full sm:w-auto text-center"
-					href="mailto:begenchgeldyev@gmail.com">
-					Contact Me
-				</a>
-			</div>
-		</div>
+  <div class="max-w-6xl w-full space-y-12 md:space-y-16 z-10 py-12 md:py-16">
+    <!-- Hero Section -->
+    <div class="text-center space-y-6 max-w-5xl mx-auto">
+      <div class="flex flex-wrap justify-center gap-3 mb-4">
+        <span
+          class="font-mono text-primary-container bg-primary-container/10 px-3 py-1.5 text-sm border border-primary-container/30 uppercase tracking-wider">
+          based in tomsk
+        </span>
+        <span class="font-mono text-secondary bg-secondary/10 px-3 py-1.5 text-sm border border-secondary/30 uppercase tracking-wider">
+          shipping since 2021
+        </span>
+      </div>
+      <!--#include hero-role.html-->
+      <p class="text-lg md:text-[22px] font-body text-on-surface-variant max-w-[52ch] mx-auto leading-relaxed mt-6">
+        Building resilient, high-performance web systems with a focus on artisanal code and user-centric architecture.
+      </p>
+      <div class="pt-4 md:pt-6 flex flex-col sm:flex-row items-center justify-center gap-4">
+        <a
+          class="group relative inline-flex items-center justify-center gap-3 px-6 sm:px-8 py-4 bg-primary-container text-on-primary-container font-mono font-bold uppercase tracking-wider text-base hover:bg-white transition-all duration-300 w-full sm:w-auto text-center"
+          href="/projects">
+          View Portfolio
+          <span aria-hidden="true" class="material-symbols-outlined text-lg transition-transform group-hover:translate-x-1">
+            arrow_forward
+          </span>
+        </a>
+        <a
+          class="px-6 sm:px-8 py-4 border border-outline text-on-surface font-mono uppercase tracking-wider text-base hover:border-primary-container hover:text-primary-container transition-all w-full sm:w-auto text-center"
+          href="mailto:begenchgeldyev@gmail.com">
+          Contact Me
+        </a>
+      </div>
+    </div>
 
-		<!-- Terminal Emulator Section -->
-		<section class="w-full max-w-5xl mx-auto">
-			<div
-				id="terminal-wrap"
-				class="bg-[#0e0e0e] border border-outline-variant/50 rounded-lg overflow-hidden shadow-2xl shadow-primary-container/5">
-				<!--#include terminal-chrome.html-->
-				<!-- Terminal Body — single scrollable area, input lives inside -->
-				<div id="terminal-body" class="p-4 sm:p-6 font-mono text-base leading-relaxed h-[360px] sm:h-[400px] overflow-y-auto custom-scrollbar">
-					<div id="terminal-intro" class="text-on-surface-variant/90">
-						Ask about Begench, or type <span class="text-primary-container">help</span>.
-					</div>
-					<!-- active input line, always appended last by JS -->
-					<div id="input-line" class="flex items-center gap-3 mt-2 min-h-8 cursor-text">
-						<span id="terminal-prompt" aria-hidden="true" class="text-primary-container font-bold shrink-0">&gt;</span>
-						<span id="terminal-loader" class="terminal-pixels" aria-hidden="true" hidden><span></span><span></span><span></span></span>
-						<input
-							id="terminal-input"
-							aria-label="Terminal message or command"
-							aria-describedby="terminal-status"
-							class="min-w-0 flex-1 w-full bg-transparent border-0 p-0 text-white placeholder:text-on-surface-variant"
-							type="text"
-							autocomplete="off"
-							autocorrect="off"
-							autocapitalize="off"
-							spellcheck="false">
-						<span id="terminal-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></span>
-					</div>
-				</div>
-				<div
-					class="flex flex-wrap items-center gap-x-2 gap-y-2 border-t border-outline-variant/50 px-4 sm:px-6 py-2.5 font-mono text-xs sm:text-sm"
-					role="group"
-					aria-label="Session status">
-					<span class="whitespace-nowrap"><span class="text-primary-container">stack:</span> <span class="text-on-surface">ts · react · c++ · bun</span></span>
-					<span class="hidden sm:inline text-outline-variant/60" aria-hidden="true">│</span>
-					<span class="whitespace-nowrap"><span class="text-primary-container">now:</span> <span class="text-on-surface">pantheon</span></span>
-					<span class="hidden sm:inline text-outline-variant/60" aria-hidden="true">│</span>
-					<span class="whitespace-nowrap"><span class="text-primary-container">tz:</span> <span class="text-on-surface">utc+7</span></span>
-				</div>
-			</div>
-		</section>
+    <!-- Terminal Emulator Section -->
+    <section class="w-full max-w-5xl mx-auto">
+      <div
+        id="terminal-wrap"
+        class="bg-[#0e0e0e] border border-outline-variant/50 rounded-lg overflow-hidden shadow-2xl shadow-primary-container/5">
+        <!--#include terminal-chrome.html-->
+        <!-- Terminal Body — single scrollable area, input lives inside -->
+        <div
+          id="terminal-body"
+          class="p-4 sm:p-6 font-mono text-base leading-relaxed h-[360px] sm:h-[400px] overflow-y-auto custom-scrollbar">
+          <!-- biome-ignore format: Keep punctuation adjacent to the inline command. -->
+          <div id="terminal-intro" class="text-on-surface-variant/90">
+            Ask about Begench, or type <span class="text-primary-container">help</span>.
+          </div>
+          <!-- active input line, always appended last by JS -->
+          <div id="input-line" class="flex items-center gap-3 mt-2 min-h-8 cursor-text">
+            <span id="terminal-prompt" aria-hidden="true" class="text-primary-container font-bold shrink-0">&gt;</span>
+            <span id="terminal-loader" class="terminal-pixels" aria-hidden="true" hidden>
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+            <input
+              id="terminal-input"
+              aria-label="Terminal message or command"
+              aria-describedby="terminal-status"
+              class="min-w-0 flex-1 w-full bg-transparent border-0 p-0 text-white placeholder:text-on-surface-variant"
+              type="text"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="off"
+              spellcheck="false">
+            <span id="terminal-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></span>
+          </div>
+        </div>
+      </div>
+    </section>
 
-		<!--#include terminal-emulator.html-->
-
-	</div>
+    <!--#include terminal-emulator.html-->
+  </div>
 </main>

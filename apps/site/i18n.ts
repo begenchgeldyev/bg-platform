@@ -34,6 +34,13 @@ const EN = {
   dateUnknown: 'Unknown',
   dateLocale: 'en',
   langToggleLabel: 'Switch language',
+  copyEmailLabel: 'Copy email address',
+  copyEmailSuccess: 'Copied',
+  copyEmailFailure: 'Could not copy. Select and copy the email address.',
+  projectLinksHeading: 'Links',
+  projectGithubLink: 'GitHub',
+  projectLiveLink: 'Live app',
+  externalNewTab: 'opens in a new tab',
 } as const;
 
 export type StringKey = keyof typeof EN;
@@ -52,6 +59,13 @@ const STRINGS: Record<Lang, Record<StringKey, string>> = {
     dateUnknown: 'Неизвестно',
     dateLocale: 'ru',
     langToggleLabel: 'Сменить язык',
+    copyEmailLabel: 'Скопировать адрес почты',
+    copyEmailSuccess: 'Скопировано',
+    copyEmailFailure: 'Не удалось скопировать. Выделите и скопируйте адрес почты.',
+    projectLinksHeading: 'Ссылки',
+    projectGithubLink: 'GitHub',
+    projectLiveLink: 'Открыть приложение',
+    externalNewTab: 'откроется в новой вкладке',
   },
 };
 

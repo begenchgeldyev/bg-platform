@@ -14,6 +14,8 @@ const projects: Project[] = [ordinaryName, 'X'.repeat(120)].map((name, index) =>
   description: 'Preserved description.',
   content: '<p>Preserved full body.</p>',
   image: null,
+  githubUrl: null,
+  liveUrl: null,
   isHidden: false,
   icon: 'database',
   tags: ['Bun'],
@@ -109,11 +111,44 @@ try {
             padding: width <= 600 ? '18px' : '22px',
             margin: width <= 600 ? '24px' : '28px',
           });
-          const prefix = header.locator(':scope > span').first();
+          const prefix = header.locator(path === '/resume' ? '.resume-heading > span' : ':scope > span').first();
           assert.equal(await prefix.textContent(), path.startsWith('/projects/') ? '~/project/' : '~/');
           assert.equal(await prefix.getAttribute('aria-hidden'), 'true');
-          assert.equal(await prefix.evaluate((node: Element) => getComputedStyle(node).color), 'rgb(0, 255, 65)');
+          assert.equal(
+            await prefix.evaluate((node: Element) => getComputedStyle(node).color),
+            path.startsWith('/projects/') ? 'rgb(242, 241, 240)' : 'rgb(0, 255, 65)',
+          );
           const cursor = header.locator('.projects-header-cursor');
+          const spacing = await heading.evaluate((node: Element) => {
+            const prefix = node.previousElementSibling?.getBoundingClientRect();
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            const lines = [...range.getClientRects()];
+            const last = lines.at(-1);
+            const cursor = node.nextElementSibling;
+            return {
+              prefixRight: prefix?.right,
+              prefixTop: prefix?.top,
+              firstLeft: lines[0]?.left,
+              firstTop: lines[0]?.top,
+              lineStart: node.closest('header')?.getBoundingClientRect().left,
+              cursorMargin: cursor && getComputedStyle(cursor).marginLeft,
+              cursorGap: cursor && last ? cursor.getBoundingClientRect().left - last.right : null,
+              sameLine: cursor && last ? Math.abs(cursor.getBoundingClientRect().top - last.top) < 12 : false,
+            };
+          });
+          assert.ok(spacing.prefixRight !== undefined && spacing.firstLeft !== undefined);
+          if (spacing.firstTop !== undefined && spacing.prefixTop !== undefined && spacing.firstTop > spacing.prefixTop + 12) {
+            assert.ok(
+              spacing.lineStart !== undefined && Math.abs(spacing.firstLeft - spacing.lineStart) < 1,
+              'wrapped name starts at the line edge without added indentation',
+            );
+          } else {
+            assert.ok(Math.abs(spacing.firstLeft - spacing.prefixRight) < 1, `${path}: prefix and name have no layout gap`);
+          }
+          assert.equal(spacing.cursorMargin, '8px', `${path}: cursor retains its explicit 8px separation`);
+          if (spacing.sameLine)
+            assert.ok(spacing.cursorGap !== null && Math.abs(spacing.cursorGap - 8) < 1, `${path}: rendered cursor gap is 8px`);
           assert.equal(await cursor.getAttribute('aria-hidden'), 'true');
           assert.deepEqual(
             await cursor.evaluate((node: Element) => {
@@ -147,8 +182,13 @@ try {
           if (path === '/resume') {
             const download = page.locator('main a[download]');
             const action = await download.boundingBox();
-            assert.ok(action && action.y > box.y + box.height, 'download sits below the divider');
-            assert.ok(Math.abs(action.x + action.width - box.x - box.width) < 1, 'download is right-aligned');
+            assert.ok(action && action.y >= box.y && action.y + action.height < box.y + box.height, 'download remains above the divider');
+            const title = await header.locator('.resume-heading').boundingBox();
+            assert.ok(title);
+            if (width === 1440) {
+              assert.ok(action.x > title.x + title.width && action.y < title.y + title.height, 'download sits beside the heading');
+              assert.ok(Math.abs(action.x - title.x - title.width - 16) < 1, 'PDF action keeps its 16px gap');
+            }
             assert.equal(
               (await download.textContent()).replace(/\s+/g, ' ').trim(),
               lang === 'en' ? 'download Download resume' : 'download Скачать резюме',
@@ -158,7 +198,13 @@ try {
             const back = await page.locator('main a[href="/projects"]').boundingBox();
             const grid = await page.locator('main > section').boundingBox();
             assert.ok(back && grid && box.y + box.height < back.y && back.y < grid.y);
-            assert.equal(await heading.evaluate((node: Element) => getComputedStyle(node).textTransform), 'none');
+            assert.equal(await heading.evaluate((node: Element) => getComputedStyle(node).textTransform), 'lowercase');
+            assert.equal(await heading.evaluate((node: Element) => getComputedStyle(node).color), 'rgb(242, 241, 240)');
+            assert.equal(
+              await heading.evaluate((node: Element) => node.previousSibling?.nodeType),
+              1,
+              'no whitespace node separates slash and name',
+            );
             const placement = await heading.evaluate((node: Element) => {
               const range = document.createRange();
               range.selectNodeContents(node);
@@ -187,6 +233,8 @@ try {
         const heading = page.getByRole('heading', { level: 1 });
         await heading.dblclick();
         assert.equal(await heading.getAttribute('contenteditable'), 'true');
+        assert.equal(await heading.textContent(), ordinaryName);
+        assert.equal(await heading.evaluate((node: Element) => getComputedStyle(node).textTransform), 'none');
         assert.equal(
           await page
             .locator('main > header > span')
