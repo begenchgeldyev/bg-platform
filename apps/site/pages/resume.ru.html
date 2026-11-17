@@ -3,7 +3,7 @@
 
   <div class="grid grid-cols-1 md:grid-cols-3 gap-12">
 
-    <!-- Left column: Experience + Projects + Education -->
+    <!-- Left column: Experience + Education -->
     <div class="md:col-span-2 space-y-14" data-cv-left>
 
       <!-- Experience -->
@@ -113,89 +113,6 @@
               <button type="button" class="text-[13px] font-mono text-on-surface-variant/80 border border-outline/40 px-2.5 py-1.5 hover:text-primary-container hover:border-primary-container transition-colors duration-150">MUI</button>
               <button type="button" class="text-[13px] font-mono text-on-surface-variant/80 border border-outline/40 px-2.5 py-1.5 hover:text-primary-container hover:border-primary-container transition-colors duration-150">Vite</button>
               <button type="button" class="text-[13px] font-mono text-on-surface-variant/80 border border-outline/40 px-2.5 py-1.5 hover:text-primary-container hover:border-primary-container transition-colors duration-150">Docker</button>
-            </div>
-          </article>
-
-        </div>
-      </section>
-
-      <!-- Projects -->
-      <section>
-        <div class="flex items-center gap-3 mb-6">
-          <span class="font-mono text-sm text-primary-container/60 uppercase tracking-[0.2em]">Проекты</span>
-          <div class="flex-1 border-t border-outline-variant/40"></div>
-        </div>
-        <div class="space-y-12">
-
-          <article class="border-l-2 border-primary-container/40 pl-5 py-1">
-            <div class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 mb-1">
-              <a href="https://github.com/begenchgeldyev/pantheon" target="_blank" rel="noopener noreferrer" class="font-headline font-bold text-white text-xl uppercase hover:text-primary-container transition-colors duration-150">Pantheon</a>
-              <span class="font-mono text-sm text-on-surface-variant/80">Авг 2026 — наст. время</span>
-            </div>
-            <span class="font-mono text-sm text-primary-container/80 uppercase tracking-widest block mb-4">Пет-проект — TypeScript / OpenClaw</span>
-            <p class="text-white/90 text-base leading-relaxed max-w-[72ch] mb-5">
-              Telegram-шлюз для работы с агентами OpenClaw, рассчитанный на небольшой круг пользователей. Стек: TypeScript, Bun, grammY, Telegram Bot API и systemd.
-            </p>
-            <ul class="text-white/90 text-base leading-relaxed list-disc list-outside pl-5 space-y-2.5 max-w-[72ch] mb-5">
-              <li>При первом обращении для каждого разрешённого пользователя автоматически создаётся отдельный изолированный агент. У него своё рабочее пространство, память, история сессий и напоминания — данные разных пользователей не пересекаются.</li>
-              <li>Система определяет тип запроса и направляет сообщение нужному агенту. Если пользователь создаёт напоминание, оно сохраняется и в нужный момент отправляется обратно в тот же Telegram-чат.</li>
-              <li>Архитектура разделена на независимые компоненты. Взаимодействие со средой OpenClaw происходит через единый CLI-адаптер, поэтому остальные части системы не зависят от внутреннего устройства агентов.</li>
-              <li>Надёжность основных компонентов проверяется 102 тестами в 13 модулях. Отдельно тестируются маршрутизация сообщений, создание пользовательских агентов и Telegram-транспорт.</li>
-            </ul>
-            <div class="flex flex-wrap gap-2">
-              <button type="button" class="text-[13px] font-mono text-on-surface-variant/80 border border-outline/40 px-2.5 py-1.5 hover:text-primary-container hover:border-primary-container transition-colors duration-150">TypeScript</button>
-              <button type="button" class="text-[13px] font-mono text-on-surface-variant/80 border border-outline/40 px-2.5 py-1.5 hover:text-primary-container hover:border-primary-container transition-colors duration-150">Bun</button>
-              <button type="button" class="text-[13px] font-mono text-on-surface-variant/80 border border-outline/40 px-2.5 py-1.5 hover:text-primary-container hover:border-primary-container transition-colors duration-150">grammY</button>
-              <button type="button" class="text-[13px] font-mono text-on-surface-variant/80 border border-outline/40 px-2.5 py-1.5 hover:text-primary-container hover:border-primary-container transition-colors duration-150">Telegram Bot API</button>
-              <button type="button" class="text-[13px] font-mono text-on-surface-variant/80 border border-outline/40 px-2.5 py-1.5 hover:text-primary-container hover:border-primary-container transition-colors duration-150">systemd</button>
-            </div>
-          </article>
-
-          <article class="border-l-2 border-primary-container/40 pl-5 py-1">
-            <div class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 mb-1">
-              <span class="font-headline font-bold text-white text-xl uppercase">ARM64 CI Framework</span>
-              <span class="font-mono text-sm text-on-surface-variant/80">2025 — 2026</span>
-            </div>
-            <span class="font-mono text-sm text-primary-container/80 uppercase tracking-widest block mb-4">Дипломная работа — Python / gem5 / Jenkins</span>
-            <p class="text-white/90 text-base leading-relaxed max-w-[72ch] mb-5">
-              Фреймворк, который прогоняет ARM64-сборки внутри полносистемной симуляции gem5 на обычных x86_64-агентах CI, так что кросс-архитектурная сборка не требует ни ARM-железа, ни облачных инстансов. Стек: Python, gem5, Jenkins, Debian, QEMU и Bash.
-            </p>
-            <ul class="text-white/90 text-base leading-relaxed list-disc list-outside pl-5 space-y-2.5 max-w-[72ch] mb-5">
-              <li>Поднимает полноценного гостя Debian ARM64 под gem5 и управляет им из Python: окружение описывается в YAML, оркестратор владеет жизненным циклом симуляции, артефакты передаются по SSH.</li>
-              <li>Гость разделён на два диска — неизменяемая база 2 ГБ и оверлей сборочного окружения 4 ГБ, монтируемый в chroot, — поэтому обновление тулчейна не трогает базовый образ, а сборки остаются воспроизводимыми.</li>
-              <li>Сократил цикл на 40%, с 14.6 до 8.7 минут, за счёт восстановления из checkpoint’ов gem5 вместо холодной загрузки (382 с против 28 с); ccache внутри chroot дал ещё 30–50% на инкрементальных сборках.</li>
-              <li>Оформлен как Jenkins Shared Library, поэтому пайплайн вызывает один декларативный шаг. За месяц эксплуатации — 147 ARM64-сборок с success rate 94.2%.</li>
-            </ul>
-            <div class="flex flex-wrap gap-2">
-              <button type="button" class="text-[13px] font-mono text-on-surface-variant/80 border border-outline/40 px-2.5 py-1.5 hover:text-primary-container hover:border-primary-container transition-colors duration-150">Python</button>
-              <button type="button" class="text-[13px] font-mono text-on-surface-variant/80 border border-outline/40 px-2.5 py-1.5 hover:text-primary-container hover:border-primary-container transition-colors duration-150">gem5</button>
-              <button type="button" class="text-[13px] font-mono text-on-surface-variant/80 border border-outline/40 px-2.5 py-1.5 hover:text-primary-container hover:border-primary-container transition-colors duration-150">Jenkins</button>
-              <button type="button" class="text-[13px] font-mono text-on-surface-variant/80 border border-outline/40 px-2.5 py-1.5 hover:text-primary-container hover:border-primary-container transition-colors duration-150">Debian</button>
-              <button type="button" class="text-[13px] font-mono text-on-surface-variant/80 border border-outline/40 px-2.5 py-1.5 hover:text-primary-container hover:border-primary-container transition-colors duration-150">QEMU</button>
-              <button type="button" class="text-[13px] font-mono text-on-surface-variant/80 border border-outline/40 px-2.5 py-1.5 hover:text-primary-container hover:border-primary-container transition-colors duration-150">Bash</button>
-            </div>
-          </article>
-
-          <article class="border-l-2 border-primary-container/40 pl-5 py-1">
-            <div class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 mb-1">
-              <a href="https://github.com/begenchgeldyev/interpreter" target="_blank" rel="noopener noreferrer" class="font-headline font-bold text-white text-xl uppercase hover:text-primary-container transition-colors duration-150">Интерпретатор</a>
-              <span class="font-mono text-sm text-on-surface-variant/80">2025</span>
-            </div>
-            <span class="font-mono text-sm text-primary-container/80 uppercase tracking-widest block mb-4">C++ / LL(1) / ОПН</span>
-            <p class="text-white/90 text-base leading-relaxed max-w-[72ch] mb-5">
-              Интерпретатор небольшого языка программирования, заданного собственной контекстно-свободной грамматикой: лексический анализ, LL(1)-разбор и исполнение обратной польской записи. Стек: C++, Make, LL(1), RPN и BNF.
-            </p>
-            <ul class="text-white/90 text-base leading-relaxed list-disc list-outside pl-5 space-y-2.5 max-w-[72ch] mb-5">
-              <li>Разбирает вход LL(1)-анализатором по таблице переходов и строит обратную польскую запись в том же проходе, а не обходит отдельно построенное дерево.</li>
-              <li>Исполняет полученную запись: арифметика, условные переходы, циклы while и статические массивы.</li>
-              <li>Грамматика заранее формализована в БНФ с таблицами переходов и генерации ОПН, поэтому разбор следует письменной спецификации, а не набору частных правил.</li>
-            </ul>
-            <div class="flex flex-wrap gap-2">
-              <button type="button" class="text-[13px] font-mono text-on-surface-variant/80 border border-outline/40 px-2.5 py-1.5 hover:text-primary-container hover:border-primary-container transition-colors duration-150">C++</button>
-              <button type="button" class="text-[13px] font-mono text-on-surface-variant/80 border border-outline/40 px-2.5 py-1.5 hover:text-primary-container hover:border-primary-container transition-colors duration-150">Make</button>
-              <button type="button" class="text-[13px] font-mono text-on-surface-variant/80 border border-outline/40 px-2.5 py-1.5 hover:text-primary-container hover:border-primary-container transition-colors duration-150">LL(1)</button>
-              <button type="button" class="text-[13px] font-mono text-on-surface-variant/80 border border-outline/40 px-2.5 py-1.5 hover:text-primary-container hover:border-primary-container transition-colors duration-150">RPN</button>
-              <button type="button" class="text-[13px] font-mono text-on-surface-variant/80 border border-outline/40 px-2.5 py-1.5 hover:text-primary-container hover:border-primary-container transition-colors duration-150">BNF</button>
             </div>
           </article>
 
