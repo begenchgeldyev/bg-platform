@@ -3,14 +3,11 @@ import { extname, join, normalize, sep } from 'node:path';
 import { type Lang, localizedFragmentFile, resolveLang, t } from './i18n';
 
 type NavKey = 'projects' | 'logs' | 'resume';
-type FooterVariant = 'default' | 'home';
 
 type LayoutConfig = {
   title: Record<Lang, string>;
   activeNav?: NavKey;
   brandIsLink?: boolean;
-  footerVariant?: FooterVariant;
-  includeResumeLink?: boolean;
   selectionTextClass?: string;
   showTerminalIcon?: boolean;
   pageTransitions?: boolean;
@@ -30,12 +27,10 @@ const DYNAMIC_PAGE_CONFIGS: Record<DynamicPage['page'], Omit<LayoutConfig, 'titl
   project: {
     activeNav: 'projects',
     brandIsLink: true,
-    footerVariant: 'default',
     showTerminalIcon: true,
   },
   admin: {
     brandIsLink: true,
-    footerVariant: 'default',
     showTerminalIcon: true,
     pageTransitions: false,
   },
@@ -179,8 +174,6 @@ const PAGE_CONFIGS: Record<string, PageConfig> = {
     title: { en: 'begenchgeldyev', ru: 'begenchgeldyev' },
     fragmentFile: 'index.html',
     brandIsLink: false,
-    footerVariant: 'home',
-    includeResumeLink: true,
     selectionTextClass: 'selection:text-on-primary-fixed',
   },
   '/resume': {
@@ -188,8 +181,6 @@ const PAGE_CONFIGS: Record<string, PageConfig> = {
     fragmentFile: 'resume.html',
     activeNav: 'resume',
     brandIsLink: true,
-    footerVariant: 'default',
-    includeResumeLink: true,
     showTerminalIcon: true,
   },
   '/logs': {
@@ -197,7 +188,6 @@ const PAGE_CONFIGS: Record<string, PageConfig> = {
     fragmentFile: 'logs.html',
     activeNav: 'logs',
     brandIsLink: true,
-    footerVariant: 'default',
     showTerminalIcon: true,
   },
   '/projects': {
@@ -205,7 +195,6 @@ const PAGE_CONFIGS: Record<string, PageConfig> = {
     fragmentFile: 'projects.html',
     activeNav: 'projects',
     brandIsLink: true,
-    footerVariant: 'default',
     showTerminalIcon: true,
   },
 };
@@ -295,27 +284,19 @@ async function renderHeader(config: LayoutConfig, lang: Lang) {
   });
 }
 
-async function renderFooter(config: LayoutConfig, lang: Lang) {
-  if (config.footerVariant === 'home') {
-    return renderComponentTemplate('footer-home.html', {
-      copyEmailLabel: t(lang, 'copyEmailLabel'),
-      copyEmailSuccess: t(lang, 'copyEmailSuccess'),
-      copyEmailFailure: t(lang, 'copyEmailFailure'),
-    });
-  }
-
-  const resumeLink = config.includeResumeLink
-    ? `<a class="font-mono text-xs tracking-widest text-primary-container underline font-bold uppercase" href="/public/Begench-Geldyev-Resume.pdf" target="_blank">${t(lang, 'footerResumeLink')}</a>`
-    : '';
-
-  return renderComponentTemplate('footer-default.html', { resumeLink });
+async function renderFooter(lang: Lang) {
+  return renderComponentTemplate('footer.html', {
+    copyEmailLabel: t(lang, 'copyEmailLabel'),
+    copyEmailSuccess: t(lang, 'copyEmailSuccess'),
+    copyEmailFailure: t(lang, 'copyEmailFailure'),
+  });
 }
 
 async function renderLayout(config: LayoutConfig, content: string, lang: Lang) {
   const selectionTextClass = config.selectionTextClass ?? 'selection:text-on-primary-container';
   return renderComponentTemplate('document.html', {
     content,
-    footer: await renderFooter(config, lang),
+    footer: await renderFooter(lang),
     header: await renderHeader(config, lang),
     lang,
     pageTransitions: config.pageTransitions === false ? '' : await renderComponentTemplate('page-transitions.html'),

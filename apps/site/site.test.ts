@@ -102,47 +102,69 @@ describe('Logs path heading', () => {
   });
 });
 
-describe('home footer contacts', () => {
-  test.each(['en', 'ru'] as const)('offers a clickable email and two social profiles without a duplicate download (%s)', async (lang) => {
-    const response = await renderPage('/', lang);
-    expect(response?.status).toBe(200);
-    const markup = await (response as Response).clone().text();
-    expect(markup).toContain('data-copy-email="begenchgeldyev@gmail.com"');
-    expect(markup).toContain('id="email-copy-status"');
-    expect(markup).toContain('/public/email-copy.js');
-    const links: { href: string | null; text: string; target: string | null; rel: string | null }[] = [];
-    let footerCount = 0;
-    let footerText = '';
-    await new HTMLRewriter()
-      .on('footer', {
-        element() {
-          footerCount++;
-        },
-        text(chunk) {
-          footerText += chunk.text;
-        },
-      })
-      .on('footer a', {
-        element(element) {
-          links.push({
-            href: element.getAttribute('href'),
-            text: '',
-            target: element.getAttribute('target'),
-            rel: element.getAttribute('rel'),
-          });
-        },
-        text(chunk) {
-          links[links.length - 1].text += chunk.text;
-        },
-      })
-      .transform(response as Response)
-      .text();
-    expect(footerCount).toBe(1);
-    expect(links.map((link) => ({ ...link, text: link.text.trim() }))).toEqual([
-      { href: 'https://github.com/begenchgeldyev', text: 'GitHub', target: '_blank', rel: 'noopener noreferrer' },
-      { href: 'https://linkedin.com/in/begench-geldyev', text: 'LinkedIn', target: '_blank', rel: 'noopener noreferrer' },
-    ]);
-    expect(footerText).not.toMatch(/©|copyright|resume|резюме|\.pdf/i);
+const FOOTER_BLOCK = /<footer\b[\s\S]*?<\/footer>\s*<script src="\/public\/email-copy\.js"[^>]*><\/script>/;
+
+type FooterLink = { href: string | null; text: string; target: string | null; rel: string | null };
+
+async function extractFooter(markup: string) {
+  const links: FooterLink[] = [];
+  let footerCount = 0;
+  let footerText = '';
+  await new HTMLRewriter()
+    .on('footer', {
+      element() {
+        footerCount++;
+      },
+      text(chunk) {
+        footerText += chunk.text;
+      },
+    })
+    .on('footer a', {
+      element(element) {
+        links.push({
+          href: element.getAttribute('href'),
+          text: '',
+          target: element.getAttribute('target'),
+          rel: element.getAttribute('rel'),
+        });
+      },
+      text(chunk) {
+        links[links.length - 1].text += chunk.text;
+      },
+    })
+    .transform(new Response(markup, { headers: { 'Content-Type': 'text/html' } }))
+    .text();
+  return { footerCount, footerText, links: links.map((link) => ({ ...link, text: link.text.trim() })) };
+}
+
+describe('shared footer', () => {
+  test.each(['en', 'ru'] as const)('every page ships the same email/social footer (%s)', async (lang) => {
+    const homeResponse = await renderPage('/', lang);
+    expect(homeResponse?.status).toBe(200);
+    const homeHtml = await (homeResponse as Response).text();
+    const homeFooter = homeHtml.match(FOOTER_BLOCK)?.[0] ?? '';
+    expect(homeFooter).not.toBe('');
+    expect(homeFooter).toContain('data-copy-email="begenchgeldyev@gmail.com"');
+    expect(homeFooter).toContain('id="email-copy-status"');
+
+    for (const pathname of ['/', '/resume', '/logs', '/projects']) {
+      const response = await renderPage(pathname, lang);
+      expect(response?.status).toBe(200);
+      const html = await (response as Response).text();
+      const footer = html.match(FOOTER_BLOCK)?.[0] ?? '';
+      expect(footer).toBe(homeFooter);
+      expect(html.match(/<footer\b/g)).toHaveLength(1);
+      expect(footer).toContain('data-copy-email="begenchgeldyev@gmail.com"');
+      expect(footer).toContain('id="email-copy-status"');
+
+      const { footerCount, footerText, links } = await extractFooter(footer);
+      expect(footerCount).toBe(1);
+      expect(links).toEqual([
+        { href: 'https://github.com/begenchgeldyev', text: 'GitHub', target: '_blank', rel: 'noopener noreferrer' },
+        { href: 'https://linkedin.com/in/begench-geldyev', text: 'LinkedIn', target: '_blank', rel: 'noopener noreferrer' },
+      ]);
+      expect(footerText).not.toMatch(/©|copyright|resume|резюме|\.pdf/i);
+    }
   });
 });
 
