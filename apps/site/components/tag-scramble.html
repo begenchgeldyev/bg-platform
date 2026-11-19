@@ -5,7 +5,10 @@
     const FRAME_MS = 45;
     // Pointer has to settle on a tag this long before it scrambles, so passing over does nothing.
     const HOVER_DELAY_MS = 200;
-    const tags = document.querySelectorAll('a[class*="border-outline"], button[class*="border-outline"]');
+    // Leaf tags only: rewriting textContent would flatten an inner icon into its ligature text.
+    const tags = [...document.querySelectorAll('a[class*="border-outline"], button[class*="border-outline"]')].filter(
+      (el) => el.childElementCount === 0,
+    );
     tags.forEach((el) => {
       const original = el.textContent;
       let raf = 0;
