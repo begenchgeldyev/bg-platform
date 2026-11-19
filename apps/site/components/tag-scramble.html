@@ -3,10 +3,13 @@
     const chars = '!<>-_\\/[]{}—=+*^?#________';
     // Duration of one scramble step; raise to slow the effect down.
     const FRAME_MS = 45;
+    // Pointer has to settle on a tag this long before it scrambles, so passing over does nothing.
+    const HOVER_DELAY_MS = 200;
     const tags = document.querySelectorAll('a[class*="border-outline"], button[class*="border-outline"]');
     tags.forEach((el) => {
       const original = el.textContent;
       let raf = 0;
+      let timer = 0;
       let queue = [];
 
       const scramble = () => {
@@ -50,7 +53,17 @@
         tick();
       };
 
-      el.addEventListener('mouseenter', scramble);
+      el.addEventListener('mouseenter', () => {
+        clearTimeout(timer);
+        timer = setTimeout(scramble, HOVER_DELAY_MS);
+      });
+
+      el.addEventListener('mouseleave', () => {
+        clearTimeout(timer);
+        cancelAnimationFrame(raf);
+        raf = 0;
+        if (el.textContent !== original) el.textContent = original;
+      });
     });
   })();
 </script>
