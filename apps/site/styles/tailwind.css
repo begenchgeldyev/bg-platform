@@ -9,3 +9,105 @@
 }
 @tailwind components;
 @tailwind utilities;
+
+.hero-cta-actions {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  margin-inline: auto;
+}
+
+.hero-cta-slot {
+  position: relative;
+  display: block;
+  height: 60px;
+  min-width: 0;
+  isolation: isolate;
+  perspective: 650px;
+}
+
+.hero-cta-slot::before {
+  content: "";
+  position: absolute;
+  inset: 6px 10px -3px;
+  border-radius: 50%;
+  background: #000;
+  opacity: 0.12;
+  filter: blur(8px);
+  transform: scale(0.94, 0.7);
+  transition:
+    transform 180ms ease,
+    opacity 180ms ease,
+    filter 180ms ease;
+  pointer-events: none;
+}
+
+.hero-cta-tilt {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 18px;
+  transform-origin: center bottom;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    filter 100ms ease,
+    border-color 180ms ease,
+    color 180ms ease;
+}
+
+.hero-cta-primary {
+  color: #123d26;
+}
+
+@media (min-width: 640px) {
+  .hero-cta-actions {
+    max-width: 656px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (hover: hover) {
+  .hero-cta-tilt:hover {
+    transform: translateY(-3px) rotateX(15deg);
+  }
+
+  .hero-cta-primary:hover {
+    box-shadow: inset 0 -4px 0 #153c294d;
+  }
+
+  .hero-cta-slot:has(.hero-cta-tilt:hover)::before {
+    opacity: 0.42;
+    transform: translateY(8px) scale(1, 0.85);
+    filter: blur(10px);
+  }
+}
+
+.hero-cta-tilt:active {
+  transform: translateY(1px) rotateX(0deg);
+  box-shadow: inset 0 2px 4px #143e2540;
+  filter: brightness(0.94);
+}
+
+.hero-cta-slot:has(.hero-cta-tilt:active)::before {
+  opacity: 0.25;
+  transform: scale(0.94, 0.55);
+  filter: blur(3px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-cta-tilt,
+  .hero-cta-tilt:hover,
+  .hero-cta-tilt:active,
+  .hero-cta-tilt .material-symbols-outlined,
+  .hero-cta-slot::before,
+  .hero-cta-slot:has(.hero-cta-tilt:hover)::before,
+  .hero-cta-slot:has(.hero-cta-tilt:active)::before {
+    transform: none;
+    transition: none;
+  }
+}
