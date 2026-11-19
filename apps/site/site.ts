@@ -50,7 +50,8 @@ function isProduction() {
 }
 
 const IMMUTABLE_CACHE_CONTROL = 'public, max-age=604800, stale-while-revalidate=86400';
-const TEXT_CACHE_CONTROL = 'public, max-age=3600';
+// Text assets are rebuilt under the same URL, so a stored copy must revalidate before it is reused.
+const REVALIDATE_CACHE_CONTROL = 'no-cache';
 const LONG_LIVED_EXTENSIONS = new Set(['.avif', '.jpeg', '.jpg', '.png', '.ttf', '.webp', '.woff2']);
 
 const MIME: Record<string, string> = {
@@ -417,7 +418,7 @@ export async function servePublicAsset(pathname: string, req?: Request): Promise
   const meta = await assetMeta(assetPath, file.size);
   const headers = new Headers({
     'Accept-Ranges': 'bytes',
-    'Cache-Control': LONG_LIVED_EXTENSIONS.has(extension) ? IMMUTABLE_CACHE_CONTROL : TEXT_CACHE_CONTROL,
+    'Cache-Control': LONG_LIVED_EXTENSIONS.has(extension) ? IMMUTABLE_CACHE_CONTROL : REVALIDATE_CACHE_CONTROL,
     'Content-Type': MIME[extension] ?? 'application/octet-stream',
     ETag: meta.etag,
   });

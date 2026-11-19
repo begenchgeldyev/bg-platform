@@ -379,9 +379,10 @@ describe('public asset caching', () => {
     await res.arrayBuffer();
   });
 
-  test('sends a short cache policy for text assets', async () => {
+  test('makes text assets revalidate so a rebuild is not served stale', async () => {
     const res = await servePublicAsset(SCRIPT_PATH);
-    expect(res.headers.get('cache-control')).toBe('public, max-age=3600');
+    expect(res.headers.get('cache-control')).toBe('no-cache');
+    expect(res.headers.get('etag')).toMatch(/^"\d+-\d+"$/);
     await res.arrayBuffer();
   });
 
