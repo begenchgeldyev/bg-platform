@@ -1,0 +1,322 @@
+<style>
+.contributions {
+  --contrib-muted: #aaa;
+  --contrib-line: #333;
+  border-top: 1px solid var(--contrib-line);
+  margin-top: 72px;
+  padding-top: 56px;
+  scroll-margin-top: 108px;
+}
+.contributions .section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+.contributions .section-header h2 {
+  margin: 0 0 8px;
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: -1px;
+}
+.contributions .path-prefix,
+.contributions .repo {
+  color: var(--accent);
+}
+.contributions .repo {
+  overflow-wrap: anywhere;
+}
+.contributions .section-header p {
+  margin: 0;
+  color: var(--contrib-muted);
+  font-size: 13px;
+}
+.contributions-github-link {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  color: var(--contrib-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+}
+.contributions-github-link:hover,
+.contributions-github-link:focus-visible {
+  color: var(--accent);
+}
+.contributions .log {
+  border-top: 1px solid var(--contrib-line);
+}
+.contributions .log-command {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 14px 16px;
+  background: #111111;
+  border-bottom: 1px solid var(--contrib-line);
+  color: var(--contrib-muted);
+  font-size: 12px;
+}
+.contributions .log-command code {
+  font: inherit;
+  color: #d1d1d1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.contributions .log-command code span {
+  color: var(--accent);
+}
+.contributions .log-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.contributions .log-row {
+  display: grid;
+  grid-template-columns: 96px 72px 200px minmax(0, 1fr) 20px;
+  grid-template-areas: "date status repo title arrow";
+  align-items: baseline;
+  gap: 16px;
+  line-height: 20px;
+  padding: 16px;
+  border-bottom: 1px solid #252525;
+  font-size: 13px;
+}
+.contributions .log-row:hover,
+.contributions .log-row:focus-visible {
+  background: #111b13;
+}
+.contributions .log-row time {
+  grid-area: date;
+  color: var(--contrib-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.contributions .status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: start;
+  box-sizing: border-box;
+  padding: 2px 6px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 16px;
+  letter-spacing: 0;
+  white-space: nowrap;
+  border: 1px solid;
+  border-radius: 2px;
+}
+.contributions .status-merged {
+  color: var(--accent);
+  background: #0d1b11;
+  border-color: #245c32;
+}
+.contributions .status-open {
+  color: #8fc7ff;
+  background: #101b27;
+  border-color: #315574;
+}
+.contributions .log-row .status {
+  grid-area: status;
+}
+.contributions .log-row .repo {
+  grid-area: repo;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.contributions .log-row .pr-title {
+  grid-area: title;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.contributions .link-arrow {
+  color: var(--accent);
+  transition:
+    opacity 140ms,
+    transform 140ms;
+}
+.contributions .log-row .link-arrow {
+  grid-area: arrow;
+  opacity: 0;
+  transform: translateX(-4px);
+}
+.contributions .log-row:hover .link-arrow,
+.contributions .log-row:focus-visible .link-arrow {
+  opacity: 1;
+  transform: none;
+}
+.contributions .contributions-loading,
+.contributions .contributions-empty {
+  margin: 0;
+  padding: 16px;
+  border-bottom: 1px solid var(--contrib-line);
+  color: var(--contrib-muted);
+  font-size: 12px;
+}
+.contributions .contributions-error {
+  padding: 24px;
+  border: 1px solid var(--contrib-line);
+}
+.contributions .contributions-error p {
+  margin: 0;
+  color: var(--contrib-muted);
+  font-size: 13px;
+}
+.contributions .contributions-error button {
+  margin-top: 16px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.contributions .contributions-error button[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: default;
+}
+@media (max-width: 1023px) {
+  .contributions .log-row {
+    grid-template-columns: 90px 72px 152px minmax(0, 1fr) 16px;
+    gap: 12px;
+    font-size: 12px;
+  }
+}
+@media (max-width: 767px) {
+  .contributions {
+    margin-top: 56px;
+    padding-top: 40px;
+  }
+  .contributions .section-header {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .contributions .log-row {
+    grid-template-columns: 90px minmax(0, 1fr) 16px;
+    grid-template-areas:
+      "date status arrow"
+      "repo repo arrow"
+      "title title arrow";
+    gap: 8px 12px;
+  }
+  .contributions .log-row .link-arrow {
+    align-self: center;
+  }
+}
+@media (max-width: 639px) {
+  .contributions .section-header h2 {
+    font-size: 21px;
+  }
+  .contributions .log-row {
+    padding: 16px 8px;
+  }
+}
+@media (hover: none) {
+  .contributions .log-row .link-arrow {
+    opacity: 1;
+    transform: none;
+  }
+}
+</style>
+<script>
+(() => {
+  const list = document.getElementById('contributions-list');
+  const error = document.getElementById('contributions-load-error');
+  const retry = document.getElementById('contributions-retry');
+  const errorStatus = error?.querySelector('[role="status"]');
+  if (!list || !error || !retry || !errorStatus) return;
+  const AUTO_RETRY_DELAY_MS = 2000;
+  const loadingText = list.querySelector('.contributions-loading')?.textContent.trim() ?? '';
+  const errorText = errorStatus.textContent;
+  let autoRetryUsed = false;
+  let timer = null;
+  let inFlight = false;
+  let manualPending = false;
+  // htmx reports one failed request through both error events; the token keeps the second one out.
+  let requestToken = 1;
+  let handledToken = 0;
+
+  function showErrorPanel() {
+    list.setAttribute('aria-busy', 'false');
+    const loading = list.querySelector('.contributions-loading');
+    if (loading) loading.hidden = true;
+    errorStatus.textContent = errorText;
+    retry.removeAttribute('aria-disabled');
+    error.hidden = false;
+  }
+
+  function settle(event) {
+    // A 4xx/5xx response is kept out of the page; the error panel must survive its no-op swap.
+    if (event?.detail?.ctx?.swap === 'none') return;
+    if (list.querySelector('.contributions-loading')) return;
+    if (timer) clearTimeout(timer);
+    timer = null;
+    inFlight = false;
+    list.setAttribute('aria-busy', 'false');
+    const buttonHadFocus = document.activeElement === retry;
+    error.hidden = true;
+    errorStatus.textContent = errorText;
+    retry.removeAttribute('aria-disabled');
+    if (manualPending && buttonHadFocus) list.querySelector('a')?.focus();
+    manualPending = false;
+  }
+
+  function startRequest(manual) {
+    if (inFlight || !list.isConnected) return;
+    inFlight = true;
+    requestToken += 1;
+    manualPending = manual;
+    if (manual) {
+      list.querySelector('.contributions-loading')?.remove();
+      errorStatus.textContent = loadingText;
+      retry.setAttribute('aria-disabled', 'true');
+    }
+    list.setAttribute('aria-busy', 'true');
+    list.dispatchEvent(new Event('contributions:retry'));
+  }
+
+  function handleFailure() {
+    if (handledToken === requestToken) return;
+    handledToken = requestToken;
+    inFlight = false;
+    // The first failure keeps the loading message on screen and retries once, quietly.
+    if (!autoRetryUsed) {
+      autoRetryUsed = true;
+      timer = setTimeout(() => {
+        timer = null;
+        startRequest(false);
+      }, AUTO_RETRY_DELAY_MS);
+      return;
+    }
+    manualPending = false;
+    showErrorPanel();
+  }
+
+  function retryContributions() {
+    startRequest(true);
+  }
+
+  list.addEventListener('htmx:after:swap', settle);
+  list.addEventListener('htmx:response:error', handleFailure);
+  list.addEventListener('htmx:error', handleFailure);
+
+  retry.addEventListener('mousedown', (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    retryContributions();
+  });
+  retry.addEventListener('click', (event) => {
+    if (event.detail === 0) retryContributions();
+  });
+})();
+</script>

@@ -4,6 +4,8 @@ import { AskController } from './ask/ask.controller';
 import { createAskModel } from './ask/model-config';
 import { loadResumeText } from './ask/resume-knowledge';
 import { AuthController } from './auth/auth.controller';
+import { createContributionsCache, createGitHubContributionsFetcher, GITHUB_USER } from './contributions/contributions';
+import { ContributionsController } from './contributions/contributions.controller';
 import { createRateLimiter } from './http/rate-limit';
 import { ProjectController } from './project/project.controller';
 
@@ -31,6 +33,15 @@ container.registerFactory(AskController, (c) => {
     loadResumeText,
     listPublicProjects: () => c.resolve(ProjectsRepository).list({ includeHidden: false }),
   });
+});
+
+container.registerFactory(ContributionsController, () => {
+  return new ContributionsController(
+    createContributionsCache({
+      fetch: createGitHubContributionsFetcher({ user: GITHUB_USER, token: process.env.GITHUB_TOKEN }),
+      ttlMs: 30 * 60 * 1000,
+    }),
+  );
 });
 
 container.registerFactory(AuthController, () => {

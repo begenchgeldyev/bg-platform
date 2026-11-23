@@ -41,6 +41,9 @@ const EN = {
   projectGithubLink: 'GitHub',
   projectLiveLink: 'Live app',
   externalNewTab: 'opens in a new tab',
+  contributionsEmpty: 'No contributions yet.',
+  statusMerged: 'merged',
+  statusOpen: 'open',
 } as const;
 
 export type StringKey = keyof typeof EN;
@@ -66,6 +69,9 @@ const STRINGS: Record<Lang, Record<StringKey, string>> = {
     projectGithubLink: 'GitHub',
     projectLiveLink: 'Открыть приложение',
     externalNewTab: 'откроется в новой вкладке',
+    contributionsEmpty: 'Пока нет контрибуций.',
+    statusMerged: 'смержен',
+    statusOpen: 'открыт',
   },
 };
 

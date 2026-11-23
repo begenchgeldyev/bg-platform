@@ -41,6 +41,10 @@ _Avoid_: project icon (when referring to the site), logo
 Free-text labels on a project, stored on the project itself and shown on its card.
 _Avoid_: stack, stack lines, skills, keywords, topics
 
+**Contribution**:
+A merged or open pull request the owner authored in a repository they do not own, shown on the Projects page with its status. Read live from GitHub.
+_Avoid_: OSS repo, open-source project, PR activity
+
 **Language**:
 The visitor's reading language: English, the default, or Russian. It belongs to the visitor, not to a page, and it never appears in the URL.
 _Avoid_: locale, lang code, translation
