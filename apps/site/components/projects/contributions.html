@@ -255,8 +255,9 @@
     error.hidden = false;
   }
 
-  function settle() {
-    // HTMX can finish a no-swap response too; the loading node then survives, and its error state must too.
+  function settle(event) {
+    // A 4xx/5xx response is kept out of the page; the error panel must survive its no-op swap.
+    if (event?.detail?.ctx?.swap === 'none') return;
     if (list.querySelector('.contributions-loading')) return;
     if (timer) clearTimeout(timer);
     timer = null;
