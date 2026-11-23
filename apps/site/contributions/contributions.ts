@@ -15,7 +15,7 @@ export const GITHUB_USER = 'begenchgeldyev';
 export const CONTRIBUTION_LIMIT = 12;
 
 export function contributionsQuery(user: string) {
-  return `author:${user} is:pr -user:${user}`;
+  return `author:${user} is:pr is:public -user:${user}`;
 }
 
 export function contributionsUrl(user: string) {
@@ -107,7 +107,13 @@ export function createGitHubContributionsFetcher({
       throw new Error(`GitHub search failed: ${response.status}`);
     }
 
-    return normalizeContributions(await response.json());
+    const payload: unknown = await response.json();
+    // A partial result set would silently drop contributions; the cache serves the previous list instead.
+    if (isRecord(payload) && payload.incomplete_results === true) {
+      throw new Error('GitHub search incomplete');
+    }
+
+    return normalizeContributions(payload);
   };
 }
 

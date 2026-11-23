@@ -52,12 +52,13 @@ function contributionsFor(prCount: number, repoCount: number): Contribution[] {
 }
 
 describe('contributionsUrl', () => {
-  test('asks GitHub search for open and merged PRs by the owner outside their own repositories', () => {
+  test('asks GitHub search for public open and merged PRs by the owner outside their own repositories', () => {
     const url = new URL(contributionsUrl(GITHUB_USER));
     expect(url.origin + url.pathname).toBe('https://api.github.com/search/issues');
     expect(url.searchParams.get('q')).toBe(contributionsQuery(GITHUB_USER));
-    expect(url.searchParams.get('q')).toBe('author:begenchgeldyev is:pr -user:begenchgeldyev');
+    expect(url.searchParams.get('q')).toBe('author:begenchgeldyev is:pr is:public -user:begenchgeldyev');
     expect(url.searchParams.get('q')).toContain('is:pr');
+    expect(url.searchParams.get('q')).toContain('is:public');
     expect(url.searchParams.get('q')).toContain('-user:begenchgeldyev');
     expect(url.searchParams.get('q')).not.toContain('is:merged');
     expect(url.searchParams.get('sort')).toBe('updated');
@@ -135,6 +136,14 @@ describe('normalizeContributions', () => {
   test('exports a default cap', () => {
     expect(CONTRIBUTION_LIMIT).toBe(12);
   });
+
+  test('applies the default cap when no limit is passed', () => {
+    const items = normalizeContributions({
+      items: Array.from({ length: 13 }, (_, index) => rawOpen({ number: index + 1 })),
+    });
+
+    expect(items).toHaveLength(12);
+  });
 });
 
 describe('createGitHubContributionsFetcher', () => {
@@ -162,6 +171,16 @@ describe('createGitHubContributionsFetcher', () => {
     const fetchImpl = (async () => new Response('nope', { status: 403 })) as unknown as typeof fetch;
     const fetchContributions = createGitHubContributionsFetcher({ fetchImpl });
     await expect(fetchContributions()).rejects.toThrow('GitHub search failed: 403');
+  });
+
+  test('fails on an incomplete search instead of serving a partial list', async () => {
+    const fetchImpl = (async () => ({
+      ok: true,
+      json: async () => ({ incomplete_results: true, items: [rawOpen()] }),
+    })) as unknown as typeof fetch;
+    const fetchContributions = createGitHubContributionsFetcher({ fetchImpl });
+
+    await expect(fetchContributions()).rejects.toThrow('GitHub search incomplete');
   });
 
   test('bounds the request with an abort timeout', async () => {

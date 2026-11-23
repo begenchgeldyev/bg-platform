@@ -232,7 +232,6 @@
   const errorStatus = error?.querySelector('[role="status"]');
   if (!list || !error || !retry || !errorStatus) return;
   const AUTO_RETRY_DELAY_MS = 2000;
-  const section = list.closest('.contributions');
   const loadingText = list.querySelector('.contributions-loading')?.textContent.trim() ?? '';
   const errorText = errorStatus.textContent;
   let autoRetryUsed = false;
@@ -243,6 +242,10 @@
   // htmx reports one failed request through both error events; the token keeps the second one out.
   let requestToken = 1;
   let handledToken = 0;
+
+  function focusLost() {
+    return document.activeElement === document.body || document.activeElement === document.documentElement;
+  }
 
   function showErrorPanel() {
     list.setAttribute('aria-busy', 'false');
@@ -260,7 +263,7 @@
     inFlight = false;
     list.setAttribute('aria-busy', 'false');
     error.hidden = true;
-    if (manualPending) list.querySelector('a')?.focus();
+    if (manualPending && focusReturn && focusLost()) list.querySelector('a')?.focus();
     manualPending = false;
   }
 
@@ -295,7 +298,7 @@
       }, AUTO_RETRY_DELAY_MS);
       return;
     }
-    const restoreFocus = manualPending && focusReturn;
+    const restoreFocus = manualPending && focusReturn && focusLost();
     manualPending = false;
     showErrorPanel();
     if (restoreFocus) retry.focus();
@@ -308,16 +311,6 @@
   list.addEventListener('htmx:after:swap', settle);
   list.addEventListener('htmx:response:error', handleFailure);
   list.addEventListener('htmx:error', handleFailure);
-
-  const removalObserver = new MutationObserver(() => {
-    if (section?.isConnected) return;
-    removalObserver.disconnect();
-    if (timer) clearTimeout(timer);
-    timer = null;
-    inFlight = false;
-    manualPending = false;
-  });
-  if (section) removalObserver.observe(document.body, { childList: true, subtree: true });
 
   retry.addEventListener('mousedown', (event) => {
     if (event.button !== 0) return;
