@@ -22,5 +22,25 @@
       Повторить
     </button>
   </div>
+
+  <section class="contributions" aria-labelledby="contributions-heading">
+    <div class="section-header">
+      <div>
+        <h2 id="contributions-heading"><span class="path-prefix" aria-hidden="true">~/</span>опенсорс</h2>
+        <p>Пул-реквесты в чужие репозитории</p>
+      </div>
+      <a class="contributions-github-link" href="https://github.com/begenchgeldyev" target="_blank" rel="noopener noreferrer">
+        Все на GitHub <span aria-hidden="true">↗</span>
+      </a>
+    </div>
+    <div id="contributions-list" aria-busy="true" hx-get="/api/contributions" hx-trigger="load, contributions:retry" hx-swap="innerHTML">
+      <p class="contributions-loading" role="status">Загружаю контрибуции…</p>
+    </div>
+    <div id="contributions-load-error" class="contributions-error" hidden>
+      <p role="status">Не удалось загрузить контрибуции.</p>
+      <button id="contributions-retry" type="button">Повторить</button>
+    </div>
+  </section>
+  <!--#include projects/contributions.html-->
   <!--#include projects/gallery.html-->
 </main>

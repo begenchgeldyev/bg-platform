@@ -4,6 +4,7 @@ import { container } from './app-container';
 import { AskController } from './ask/ask.controller';
 import { AuthController } from './auth/auth.controller';
 import { buildClientBundle, serveClientBundle } from './client-bundle';
+import { ContributionsController } from './contributions/contributions.controller';
 import { resolveLang } from './i18n';
 import { handleLangRequest } from './lang-route';
 import { ProjectController } from './project/project.controller';
@@ -37,6 +38,9 @@ Bun.serve({
       '/projects': {
         GET: (req) => container.resolve(ProjectController).get(req),
         POST: (req) => container.resolve(ProjectController).post(req),
+      },
+      '/contributions': {
+        GET: (req: Request) => container.resolve(ContributionsController).get(req),
       },
       '/auth/login': {
         POST: (req: Request, server: Server<undefined>) => container.resolve(AuthController).login(req, clientIp(req, server)),
