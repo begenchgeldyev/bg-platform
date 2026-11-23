@@ -181,6 +181,10 @@
   font-size: 12px;
   cursor: pointer;
 }
+.contributions .contributions-error button[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: default;
+}
 @media (max-width: 1023px) {
   .contributions .log-row {
     grid-template-columns: 90px 72px 152px minmax(0, 1fr) 16px;
@@ -238,21 +242,17 @@
   let timer = null;
   let inFlight = false;
   let manualPending = false;
-  let focusReturn = false;
   // htmx reports one failed request through both error events; the token keeps the second one out.
   let requestToken = 1;
   let handledToken = 0;
-
-  function focusLost() {
-    return document.activeElement === document.body || document.activeElement === document.documentElement;
-  }
 
   function showErrorPanel() {
     list.setAttribute('aria-busy', 'false');
     const loading = list.querySelector('.contributions-loading');
     if (loading) loading.hidden = true;
-    error.hidden = false;
     errorStatus.textContent = errorText;
+    retry.removeAttribute('aria-disabled');
+    error.hidden = false;
   }
 
   function settle() {
@@ -262,8 +262,11 @@
     timer = null;
     inFlight = false;
     list.setAttribute('aria-busy', 'false');
+    const buttonHadFocus = document.activeElement === retry;
     error.hidden = true;
-    if (manualPending && focusReturn && focusLost()) list.querySelector('a')?.focus();
+    errorStatus.textContent = errorText;
+    retry.removeAttribute('aria-disabled');
+    if (manualPending && buttonHadFocus) list.querySelector('a')?.focus();
     manualPending = false;
   }
 
@@ -273,13 +276,9 @@
     requestToken += 1;
     manualPending = manual;
     if (manual) {
-      focusReturn = document.activeElement === retry;
-      const loading = document.createElement('p');
-      loading.className = 'contributions-loading';
-      loading.setAttribute('role', 'status');
-      loading.textContent = loadingText;
-      list.replaceChildren(loading);
-      error.hidden = true;
+      list.querySelector('.contributions-loading')?.remove();
+      errorStatus.textContent = loadingText;
+      retry.setAttribute('aria-disabled', 'true');
     }
     list.setAttribute('aria-busy', 'true');
     list.dispatchEvent(new Event('contributions:retry'));
@@ -298,10 +297,8 @@
       }, AUTO_RETRY_DELAY_MS);
       return;
     }
-    const restoreFocus = manualPending && focusReturn && focusLost();
     manualPending = false;
     showErrorPanel();
-    if (restoreFocus) retry.focus();
   }
 
   function retryContributions() {
