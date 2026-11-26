@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Runs the Playwright checks in apps/site/tests against a running site.
 # Override SITE_URL, PLAYWRIGHT_MODULE, CHROMIUM_PATH or EVIDENCE_DIR when needed.
+# Each suite writes to its own subdirectory of EVIDENCE_DIR.
 set -euo pipefail
 
 root=$(git rev-parse --show-toplevel)
@@ -35,7 +36,8 @@ echo "playwright: ${PLAYWRIGHT_MODULE}"
 status=0
 for file in "$root"/apps/site/tests/*.browser.ts; do
   echo "== ${file#"$root"/}"
-  bun "$file" || status=1
+  suite=$(basename "$file" .browser.ts)
+  EVIDENCE_DIR="$EVIDENCE_DIR/$suite" bun "$file" || status=1
 done
 
 exit "$status"

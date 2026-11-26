@@ -11,6 +11,11 @@ const output = process.env.EVIDENCE_DIR || '/tmp/opencode/projects-header-implem
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true });
 try {
+  const projectsResponse = await fetch(`${baseURL}/api/projects`);
+  assert.equal(projectsResponse.status, 200, 'the gallery API must answer');
+  const { projects } = (await projectsResponse.json()) as { projects: { id: number }[] };
+  assert.ok(projects[0], 'the gallery needs at least one project');
+  const projectPath = `/projects/${projects[0].id}`;
   for (const lang of ['en', 'ru'] as const) {
     for (const width of [1440, 390]) {
       const context = await browser.newContext({
@@ -140,7 +145,7 @@ try {
         await page.screenshot({ path: `${output}/${lang}-${width}.png`, fullPage: true, animations: 'allow' });
         await page.screenshot({ path: `${output}/${lang}-${width}-viewport.png` });
         await page.locator('.project-card-link').first().click();
-        await page.waitForURL('**/projects/3');
+        await page.waitForURL(`**${projectPath}`);
         console.log(
           `PASS ${lang}/${width}: compact accessible path; canonical green block; discrete blink without layout shift; reduced-motion solid; no overflow; three autoplay cards; navigation`,
         );
@@ -176,7 +181,7 @@ try {
   assert.equal(colors.buttonText, 'rgb(10, 10, 10)', 'filled-green controls need dark neutral text');
   await page.screenshot({ path: `${output}/home-1440.png`, fullPage: true });
   console.log('PASS home brand/footer/terminal/caret/button share green; filled-button text retains dark contrast');
-  for (const path of ['/', '/projects', '/projects/3', '/resume', '/logs']) {
+  for (const path of ['/', '/projects', projectPath, '/resume', '/logs']) {
     await page.goto(path, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(500);
     const unexpected = await page.evaluate(() => {

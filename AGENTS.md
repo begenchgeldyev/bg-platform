@@ -37,9 +37,9 @@ bun run db:migrate   # apply migrations to postgres
 bun run db:seed      # seed owner user, default policies and portfolio projects (safe to re-run)
 ```
 
-**Local environment.** `bun run db:local` starts `infra/compose.local.yml` and writes `DATABASE_URL` into the untracked `apps/site/.env.local` and `packages/core/.env.local`, which Bun loads after `.env`; then it migrates and seeds. Without a database the pages still render, but `/api/projects` is empty and the project grid never appears. `infra/site.env` (from `infra/site.env.example`) belongs to the containerized stack only.
+**Local environment.** `bun run db:local` starts `infra/compose.local.yml` and writes `DATABASE_URL` into the untracked `apps/site/.env.local` and `packages/core/.env.local`, which Bun loads after `.env`; then it migrates and seeds. It is safe to re-run and converges an out-of-date `DATABASE_URL`. Without a database the pages still render, but `/api/projects` fails and the project grid never appears. `infra/site.env` (from `infra/site.env.example`) belongs to the containerized stack only.
 
-**Preview.** A preview always owns port 8613, in whichever checkout runs it. `bun run preview` stops whatever holds 8613, starts this checkout there and prints the URL. When you hand work to the owner, give that exact URL and say that production is unchanged until the merge.
+**Preview.** A preview always owns port 8613, in whichever checkout runs it. `bun run preview` converges the local database, stops whatever holds 8613, starts this checkout there and prints the URL; it refuses to run if the port still answers. When you hand work to the owner, give that exact URL and say that production is unchanged until the merge.
 
 ## Browser checks
 
