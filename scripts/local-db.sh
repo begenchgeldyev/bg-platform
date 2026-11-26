@@ -9,19 +9,16 @@ port=${POSTGRES_PORT:-5433}
 url="postgres://begench:begench@127.0.0.1:${port}/begenchgeldyev"
 
 write_env() {
-  local file=$1 rel=${1#"$root"/}
-  if [ ! -f "$file" ]; then
-    printf 'DATABASE_URL=%s\n' "$url" >"$file"
-    echo "created $rel"
-  elif grep -qx "DATABASE_URL=$url" "$file"; then
+  local file=$1 rel=${1#"$root"/} tmp
+  tmp=$(mktemp)
+  [ -f "$file" ] && grep -v '^DATABASE_URL=' "$file" >"$tmp" || true
+  printf 'DATABASE_URL=%s\n' "$url" >>"$tmp"
+  if [ -f "$file" ] && cmp -s "$tmp" "$file"; then
+    rm -f "$tmp"
     return
-  elif grep -q '^DATABASE_URL=' "$file"; then
-    sed -i "s|^DATABASE_URL=.*|DATABASE_URL=$url|" "$file"
-    echo "updated DATABASE_URL in $rel"
-  else
-    printf 'DATABASE_URL=%s\n' "$url" >>"$file"
-    echo "added DATABASE_URL to $rel"
   fi
+  mv "$tmp" "$file"
+  echo "wrote DATABASE_URL to $rel"
 }
 
 echo "starting local postgres on 127.0.0.1:${port}"
