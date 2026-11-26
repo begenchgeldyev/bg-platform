@@ -3,7 +3,7 @@ import { AdminController } from './admin/admin.controller';
 import { container } from './app-container';
 import { AskController } from './ask/ask.controller';
 import { AuthController } from './auth/auth.controller';
-import { buildClientBundle, serveClientBundle } from './client-bundle';
+import { getClientBundle, serveClientBundle } from './client-bundle';
 import { ContributionsController } from './contributions/contributions.controller';
 import { resolveLang } from './i18n';
 import { handleLangRequest } from './lang-route';
@@ -13,7 +13,7 @@ import { renderPage, servePublicAsset } from './site';
 const PORT = Number(process.env.PORT) || 8613;
 // A model can stay silent for longer than Bun's default 10 s idle timeout before its first token.
 const ASK_IDLE_TIMEOUT_SECONDS = 60;
-const askChatBundle = await buildClientBundle();
+const askChatBundle = await getClientBundle();
 
 function withPrefix<T>(prefix: string, routes: Record<string, T>): Record<string, T> {
   return Object.fromEntries(Object.entries(routes).map(([path, handler]) => [`${prefix}${path}`, handler]));
@@ -71,6 +71,10 @@ Bun.serve({
 
     if (pathname.startsWith('/public/')) {
       return servePublicAsset(pathname, req);
+    }
+
+    if (pathname.startsWith('/assets/ask-chat.')) {
+      return serveClientBundle(req, askChatBundle);
     }
 
     const projectApiMatch = pathname.match(/^\/api\/projects\/(\d+)$/);

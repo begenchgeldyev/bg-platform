@@ -214,7 +214,7 @@ try {
       await page.goto('/projects', { waitUntil: 'domcontentloaded' });
       await page.waitForSelector('.project-card');
       assert.equal(
-        await page.evaluate(() => document.querySelectorAll('script[src="/public/projects-motion.js"]').length),
+        await page.evaluate(() => document.querySelectorAll('script[src^="/public/projects-motion"]').length),
         1,
         'the shared motion enhancement must be included outside the swapped gallery content',
       );
@@ -493,7 +493,7 @@ try {
     try {
       await page.goto('/projects/4', { waitUntil: 'domcontentloaded' });
       assert.equal(
-        await page.evaluate(() => document.querySelectorAll('script[src="/public/projects-motion.js"]').length),
+        await page.evaluate(() => document.querySelectorAll('script[src^="/public/projects-motion"]').length),
         1,
         'the shared enhancement must be included on a project page',
       );
@@ -628,7 +628,7 @@ try {
         return {
           oldHasState: oldFrame?.hasAttribute('data-image-motion') ?? false,
           oldConnected: oldFrame?.isConnected ?? false,
-          scriptTags: document.querySelectorAll('script[src="/public/projects-motion.js"]').length,
+          scriptTags: document.querySelectorAll('script[src^="/public/projects-motion"]').length,
           frames: document.querySelectorAll('.project-cover').length,
           oldSceneSrc: (window as Window & { oldScene?: Element }).oldScene?.getAttribute('src'),
           oldSceneConnected: (window as Window & { oldScene?: Element }).oldScene?.isConnected,
