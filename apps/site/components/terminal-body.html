@@ -1,0 +1,26 @@
+<!-- The prompt line stays last as the transcript grows. -->
+<div
+  id="terminal-body"
+  class="p-4 sm:p-6 font-mono text-base leading-relaxed h-[360px] sm:h-[400px] overflow-y-auto custom-scrollbar">
+  <!-- biome-ignore format: Keep punctuation adjacent to the inline command. -->
+  <div id="terminal-intro" class="text-on-surface-variant/90">{{ terminalIntro }} <span class="text-primary-container">help</span>.</div>
+  <div id="input-line" class="flex items-center gap-3 mt-2 min-h-8 cursor-text">
+    <span id="terminal-prompt" aria-hidden="true" class="text-primary-container font-bold shrink-0">&gt;</span>
+    <span id="terminal-loader" class="terminal-pixels" aria-hidden="true" hidden>
+      <span></span>
+      <span></span>
+      <span></span>
+    </span>
+    <input
+      id="terminal-input"
+      aria-label="{{ terminalPromptLabel }}"
+      aria-describedby="terminal-status"
+      class="min-w-0 flex-1 w-full bg-transparent border-0 p-0 text-white placeholder:text-on-surface-variant"
+      type="text"
+      autocomplete="off"
+      autocorrect="off"
+      autocapitalize="off"
+      spellcheck="false">
+    <span id="terminal-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></span>
+  </div>
+</div>

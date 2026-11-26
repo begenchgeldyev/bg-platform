@@ -39,13 +39,14 @@
   // keyboard on load, and preventScroll leaves the hero and page offset untouched.
   const finePointer = window.matchMedia('(pointer: fine)');
   function focusPrompt() {
-    if (!finePointer.matches || input.readOnly) return;
+    if (terminal.hidden || !finePointer.matches || input.readOnly) return;
     input.focus({ preventScroll: true });
   }
 
   // Clicking anywhere in the terminal returns to the prompt. A live text
   // selection is left alone so drag-selected transcript text can still be copied.
-  terminal.addEventListener('click', () => {
+  terminal.addEventListener('click', (event) => {
+    if (terminal.hasAttribute('data-terminal-panel') && event.target.closest('[data-terminal-toolbar]')) return;
     if (!window.getSelection()?.toString()) input.focus({ preventScroll: true });
   });
   body.addEventListener('scroll', () => {

@@ -30,6 +30,9 @@ class StubElement {
   setAttribute(name: string, value: string) {
     this.attributes.set(name, value);
   }
+  hasAttribute(name: string) {
+    return this.attributes.has(name);
+  }
   removeAttribute(name: string) {
     this.attributes.delete(name);
   }

@@ -355,6 +355,60 @@ describe('client-side identity', () => {
   });
 });
 
+describe('Terminal placement', () => {
+  test.each([
+    { lang: 'en', toggle: 'Toggle terminal', title: 'Terminal', close: 'Close terminal' },
+    { lang: 'ru', toggle: 'Переключить терминал', title: 'Терминал', close: 'Закрыть терминал' },
+  ] as const)('renders one hidden Terminal panel on eligible public pages ($lang)', async ({ lang, toggle, title, close }) => {
+    const project = await rendering.renderDynamicPage(withHeaders('/projects/7', { cookie: `lang=${lang}` }), {
+      page: 'project',
+      title: 'Example',
+      contentHtml: '<main>Example</main>',
+    });
+    for (const response of [
+      await renderPage('/resume', lang),
+      await renderPage('/logs', lang),
+      await renderPage('/projects', lang),
+      project,
+    ]) {
+      expect(response?.status).toBe(200);
+      const html = await response?.text();
+      const launcher = html?.match(/<button\b[^>]*data-terminal-launcher[^>]*>/)?.[0] ?? '';
+      const panel = html?.match(/<section\b[^>]*data-terminal-panel[^>]*>/)?.[0] ?? '';
+      const closeButton = html?.match(/<button\b[^>]*data-terminal-close[^>]*>/)?.[0] ?? '';
+      expect(launcher).toContain('aria-controls="terminal-wrap"');
+      expect(launcher).toContain('aria-expanded="false"');
+      expect(launcher).toContain(`aria-label="${toggle}"`);
+      expect(launcher).toMatch(/\shidden[\s>]/);
+      expect(panel).toContain('id="terminal-wrap"');
+      expect(panel).toContain(`aria-label="${title}"`);
+      expect(panel).toMatch(/\shidden[\s>]/);
+      expect(closeButton).toContain(`aria-label="${close}"`);
+      expect(html?.match(/id="terminal-input"/g)).toHaveLength(1);
+      expect(html?.match(/src="\/assets\/ask-chat\.js"/g)).toHaveLength(1);
+    }
+  });
+
+  test('leaves the home Terminal inline and Admin decorative', async () => {
+    const home = await (await renderPage('/', 'en'))?.text();
+    expect(home?.match(/id="terminal-input"/g)).toHaveLength(1);
+    expect(home).not.toMatch(/<button\b[^>]*data-terminal-launcher/);
+    expect(home).not.toMatch(/<section\b[^>]*data-terminal-panel/);
+
+    const admin = await rendering.renderDynamicPage(withHeaders('/admin', { cookie: 'lang=ru' }), {
+      page: 'admin',
+      title: 'Admin',
+      contentHtml: '<main>Admin</main>',
+    });
+    const html = await admin.text();
+    expect(html).toMatch(/<span\b[^>]*aria-hidden="true">terminal<\/span>/);
+    expect(html).not.toContain('data-terminal-launcher');
+    expect(html).not.toContain('data-terminal-panel');
+    expect(html).not.toContain('id="terminal-input"');
+    expect(html).not.toContain('/assets/ask-chat.js');
+  });
+});
+
 describe('htmx setup', () => {
   test('configures htmx 4 before it loads so 4xx/5xx responses are not swapped, as in htmx 2', async () => {
     const res = await renderPage('/projects', 'en');

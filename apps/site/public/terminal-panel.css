@@ -1,0 +1,28 @@
+body:has([data-terminal-panel]) {
+  --terminal-dock-height: min(24rem, 45dvh);
+}
+
+body[data-terminal-panel-open] {
+  padding-bottom: var(--terminal-dock-height);
+}
+
+[data-terminal-launcher][hidden],
+[data-terminal-panel][hidden] {
+  display: none;
+}
+
+[data-terminal-panel]:not([hidden]) {
+  position: fixed;
+  inset: auto 0 0;
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  height: var(--terminal-dock-height);
+}
+
+[data-terminal-panel] #terminal-body {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  overflow-wrap: anywhere;
+}
