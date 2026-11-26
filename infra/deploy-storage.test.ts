@@ -14,7 +14,7 @@ const preflight = remote.slice(0, gitVerification).replace('REPO=/opt/apps/begen
 let directory: string;
 
 beforeAll(async () => {
-  const temporary = Bun.spawnSync(['mktemp', '-d', '/tmp/opencode/deploy-storage.XXXXXX']);
+  const temporary = Bun.spawnSync(['mktemp', '-d', `${Bun.env.TMPDIR ?? '/tmp'}/deploy-storage.XXXXXX`]);
   expect(temporary.exitCode).toBe(0);
   directory = temporary.stdout.toString().trim();
   expect(Bun.spawnSync(['mkdir', '-p', `${directory}/bin`, `${directory}/repo/.git`]).exitCode).toBe(0);
@@ -36,7 +36,7 @@ esac
 });
 
 afterAll(() => {
-  if (directory?.startsWith('/tmp/opencode/deploy-storage.')) {
+  if (directory?.includes('/deploy-storage.')) {
     expect(Bun.spawnSync(['rm', '-rf', '--', directory]).exitCode).toBe(0);
   }
 });
