@@ -46,20 +46,12 @@ function dfOutput(available: string, inodes = false) {
 }
 
 async function runPreflight(
-  options: {
-    blocks?: string;
-    inodes?: string;
-    blocksExit?: number;
-    inodesExit?: number;
-    integration?: boolean;
-  } = {},
+  options: { blocks?: string; inodes?: string; blocksExit?: number; inodesExit?: number; integration?: boolean } = {},
 ) {
   await Promise.all(['df', 'git', 'docker'].map((command) => Bun.write(`${directory}/${command}.log`, '')));
-  const block = remote.match(/^  check_deploy_storage\(\) \{[\s\S]*?^  \}/m)?.[0];
+  const block = remote.match(/^ {2}check_deploy_storage\(\) \{[\s\S]*?^ {2}\}/m)?.[0];
   expect(block, 'The inline storage check must exist in the actual production script').toBeDefined();
-  const source = options.integration
-    ? preflight
-    : `set -euo pipefail\n${block}\ncheck_deploy_storage "$TEST_REPO"`;
+  const source = options.integration ? preflight : `set -euo pipefail\n${block}\ncheck_deploy_storage "$TEST_REPO"`;
   if (!source) throw new Error('Missing deployment preflight');
   const result = Bun.spawnSync(['bash', '-c', source], {
     env: {

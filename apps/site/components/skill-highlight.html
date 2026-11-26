@@ -287,7 +287,7 @@
             ? () => {
                 unwrap(el);
                 const rest = leaving.get(term);
-                if (rest && rest.every((m) => !m.isConnected)) leaving.delete(term);
+                if (rest?.every((m) => !m.isConnected)) leaving.delete(term);
               }
             : undefined,
         });

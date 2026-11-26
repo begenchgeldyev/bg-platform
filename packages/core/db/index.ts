@@ -1,3 +1,3 @@
-export { projects } from './schema';
-export { db } from './db';
 export type { Db } from './db';
+export { db } from './db';
+export { projects } from './schema';
