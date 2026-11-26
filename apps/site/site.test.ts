@@ -357,9 +357,9 @@ describe('client-side identity', () => {
 
 describe('Terminal placement', () => {
   test.each([
-    { lang: 'en', toggle: 'Toggle terminal', title: 'Terminal', close: 'Close terminal' },
-    { lang: 'ru', toggle: 'Переключить терминал', title: 'Терминал', close: 'Закрыть терминал' },
-  ] as const)('renders one hidden Terminal panel on eligible public pages ($lang)', async ({ lang, toggle, title, close }) => {
+    { lang: 'en', toggle: 'Toggle terminal', title: 'Terminal', close: 'Close terminal', expand: 'Expand terminal' },
+    { lang: 'ru', toggle: 'Переключить терминал', title: 'Терминал', close: 'Закрыть терминал', expand: 'Развернуть терминал' },
+  ] as const)('renders one hidden Terminal panel on eligible public pages ($lang)', async ({ lang, toggle, title, close, expand }) => {
     const project = await rendering.renderDynamicPage(withHeaders('/projects/7', { cookie: `lang=${lang}` }), {
       page: 'project',
       title: 'Example',
@@ -376,6 +376,7 @@ describe('Terminal placement', () => {
       const launcher = html?.match(/<button\b[^>]*data-terminal-launcher[^>]*>/)?.[0] ?? '';
       const panel = html?.match(/<section\b[^>]*data-terminal-panel[^>]*>/)?.[0] ?? '';
       const closeButton = html?.match(/<button\b[^>]*data-terminal-close[^>]*>/)?.[0] ?? '';
+      const expandButton = html?.match(/<button\b[^>]*data-terminal-fullscreen[^>]*>/)?.[0] ?? '';
       expect(launcher).toContain('aria-controls="terminal-wrap"');
       expect(launcher).toContain('aria-expanded="false"');
       expect(launcher).toContain(`aria-label="${toggle}"`);
@@ -384,6 +385,7 @@ describe('Terminal placement', () => {
       expect(panel).toContain(`aria-label="${title}"`);
       expect(panel).toMatch(/\shidden[\s>]/);
       expect(closeButton).toContain(`aria-label="${close}"`);
+      expect(expandButton).toContain(`aria-label="${expand}"`);
       expect(html?.match(/id="terminal-input"/g)).toHaveLength(1);
       expect(html?.match(/src="\/assets\/ask-chat\.js"/g)).toHaveLength(1);
     }

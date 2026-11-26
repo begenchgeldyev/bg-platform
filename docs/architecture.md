@@ -32,8 +32,8 @@ Cross-site and non-JSON guards are shared in `apps/site/http/requests.ts`; per-I
 
 `apps/site/site.ts` is the templating engine. It owns:
 
-- **`PAGE_CONFIGS`** — maps URL paths to page metadata: title per language, active nav, brand link, terminal icon, page transitions, selection colours.
-- **`renderLayout()`** — assembles the full HTML document: shared `<head>`, header, page fragment, footer.
+- **`PAGE_CONFIGS`** — maps URL paths to page metadata: title per language, active nav, brand link, header Terminal mode, page transitions, selection colours.
+- **`renderLayout()`** — assembles the full HTML document: shared `<head>`, header, page fragment, footer, and Terminal panel when the page opts in. The home page instead includes an inline Terminal with the same prompt and emulator.
 - **`renderDynamicPage(req, { page, title, contentHtml })`** — owns project/admin document presets, escapes raw title text once, preserves trusted rendered body HTML, and returns session-sensitive `no-store` responses with bodyless HEAD support. Admin always uses English, `noindex`, and no page transitions; project pages follow the language cookie. Controllers supply content, not layout/cache policy. Static `renderPage()` retains separate production language-specific ETags and revalidation.
 - **`resolveIncludes()`** — replaces `<!--#include filename.html-->` comments in page HTML with component partials from `apps/site/components/`. Includes are not localized; only the page fragment is.
 - **`servePublicAsset()`** — path-safe static file serving with MIME detection.
@@ -48,7 +48,7 @@ Tailwind CSS, prebuilt by `bun run css:build` into `apps/site/public/assets/tail
 
 ## AI assistant
 
-The home-page terminal sends ordinary messages directly to an OpenAI model through AI SDK 7 (`ai`, `@ai-sdk/openai`). `apps/site/ask/` is the server side: `AskController` (registered in `app-container.ts`, routed at `POST /api/ask`) grounds every answer in the Resume text from `pages/resume.html`, refuses cross-site and non-JSON requests, validates the AI SDK UI messages, resends history as plain text, and rate-limits per client IP. `apps/site/client/` is the browser side (AI SDK `AbstractChat`); `server.ts` bundles it with `Bun.build` at startup and serves it from memory at `/assets/ask-chat.js`. Config: `OPENAI_API_KEY` (the feature is off without it), `OPENAI_MODEL` (default `gpt-6.1-sol-fast`), optional `OPENAI_BASE_URL`.
+The Terminal sends ordinary messages directly to an OpenAI model through AI SDK 7 (`ai`, `@ai-sdk/openai`). `apps/site/ask/` is the server side: `AskController` (registered in `app-container.ts`, routed at `POST /api/ask`) grounds every answer in the Resume text from `pages/resume.html`, refuses cross-site and non-JSON requests, validates the AI SDK UI messages, resends history as plain text, and rate-limits per client IP. `apps/site/client/` is the browser side (AI SDK `AbstractChat`); `server.ts` bundles it with `Bun.build` at startup and serves it from memory at `/assets/ask-chat.js`. Config: `OPENAI_API_KEY` (the feature is off without it), `OPENAI_MODEL` (default `gpt-6.1-sol-fast`), optional `OPENAI_BASE_URL`.
 
 ## Contributions
 

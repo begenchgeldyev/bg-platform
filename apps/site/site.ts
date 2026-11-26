@@ -303,12 +303,20 @@ function terminalBodyCopy(lang: Lang) {
   return { terminalIntro: t(lang, 'terminalIntro'), terminalPromptLabel: t(lang, 'terminalPromptLabel') };
 }
 
+function renderTerminalFullscreenButton(lang: Lang) {
+  return renderComponentTemplate('terminal-fullscreen-button.html', {
+    terminalExpandLabel: t(lang, 'terminalExpandLabel'),
+    terminalRestoreLabel: t(lang, 'terminalRestoreLabel'),
+  });
+}
+
 async function renderTerminalPanel(lang: Lang): Promise<string> {
   return renderComponentTemplate('terminal-panel.html', {
     terminalTitle: t(lang, 'terminalTitle'),
     terminalCloseLabel: t(lang, 'terminalCloseLabel'),
     terminalBody: await renderComponentTemplate('terminal-body.html', terminalBodyCopy(lang)),
     terminalEmulator: await renderComponentTemplate('terminal-emulator.html'),
+    terminalFullscreenButton: await renderTerminalFullscreenButton(lang),
   });
 }
 
@@ -391,6 +399,7 @@ export async function renderPage(pathname: string, lang: Lang, req?: Request): P
 
   const content = await resolveIncludes(await fragment.text(), {
     ...terminalBodyCopy(lang),
+    terminalFullscreenButton: pathname === '/' ? await renderTerminalFullscreenButton(lang) : '',
     resumeBadge: `[${t(lang, 'navResume')}]`,
     downloadResume: t(lang, 'footerResumeLink'),
   });

@@ -26,3 +26,14 @@ body[data-terminal-panel-open] {
   height: auto;
   overflow-wrap: anywhere;
 }
+
+[data-terminal-panel][data-terminal-viewport]:not([hidden]),
+[data-terminal-panel]:fullscreen {
+  inset: 0;
+  height: 100%;
+  border: 0;
+}
+
+[data-terminal-panel][data-terminal-viewport]:not([hidden]) {
+  z-index: 65;
+}

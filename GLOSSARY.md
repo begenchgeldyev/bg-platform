@@ -54,7 +54,7 @@ The one person allowed to edit projects, and the only identity the site authenti
 _Avoid_: user, admin
 
 **Terminal**:
-The home page's assistant prompt: an intro line, a `>` prompt and a text input, plus the transcript of what has been asked. It is the only place a visitor talks to the assistant.
+The portfolio's assistant prompt: an intro line, a `>` prompt and a text input, plus the transcript of what has been asked. It appears inline on the home page and opens as a bottom panel from the header on Resume, Logs, Projects and individual Project pages. It is the only place a visitor talks to the assistant.
 _Avoid_: console, chat window, shell, REPL
 
 **Prompt line**:

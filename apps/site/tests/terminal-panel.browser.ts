@@ -22,6 +22,7 @@ async function openResume(options = {}, lang = 'en') {
     launcher: page.locator('[data-terminal-launcher]'),
     panel: page.locator('[data-terminal-panel]'),
     close: page.locator('[data-terminal-close]'),
+    fullscreen: page.locator('[data-terminal-fullscreen]'),
     input: page.locator('#terminal-input'),
   };
 }
@@ -104,6 +105,97 @@ try {
   assert.equal(await noScript.panel.isVisible(), false);
   assert.equal(await noScript.page.getByRole('heading', { level: 1 }).isVisible(), true);
   await noScript.context.close();
+
+  const native = await openResume();
+  await native.page.goto('/resume');
+  await native.launcher.click();
+  await native.input.fill('cat phi');
+  assert.equal(await native.fullscreen.count(), 1, 'the dock offers the existing fullscreen control');
+  await native.fullscreen.click();
+  await native.page.waitForFunction(() => document.fullscreenElement?.id === 'terminal-wrap');
+  assert.equal(await native.fullscreen.getAttribute('aria-pressed'), 'true');
+  assert.equal(await native.fullscreen.locator('[data-expand-icon]').isVisible(), false);
+  assert.equal(await native.fullscreen.locator('[data-restore-icon]').isVisible(), true);
+  assert.equal(await native.input.evaluate(hasFocus), true);
+  await native.page.keyboard.press('Escape');
+  await native.page.waitForFunction(() => !document.fullscreenElement);
+  assert.equal(await native.launcher.getAttribute('aria-expanded'), 'true');
+  assert.equal(await native.input.inputValue(), 'cat phi');
+  await native.fullscreen.press('Enter');
+  await native.page.waitForFunction(() => document.fullscreenElement?.id === 'terminal-wrap');
+  await native.page.getByRole('button', { name: 'Restore terminal' }).click();
+  await native.page.waitForFunction(() => !document.fullscreenElement);
+  assert.equal(await native.panel.isVisible(), true);
+  await native.fullscreen.click();
+  await native.page.waitForFunction(() => document.fullscreenElement?.id === 'terminal-wrap');
+  await native.close.click();
+  await native.panel.waitFor({ state: 'hidden' });
+  assert.equal(await native.page.evaluate(() => document.fullscreenElement), null);
+  assert.equal(await native.launcher.getAttribute('aria-expanded'), 'false');
+  assert.equal(await native.launcher.evaluate(hasFocus), true);
+  await native.context.close();
+  console.log('PASS native Terminal fullscreen, restore, Escape and close with focus return');
+
+  for (const mode of ['unsupported', 'denied']) {
+    const fallback = await openResume({}, 'ru');
+    await fallback.context.addInitScript((kind: string) => {
+      if (kind === 'unsupported') Object.defineProperty(document, 'fullscreenEnabled', { value: false });
+      else Element.prototype.requestFullscreen = () => Promise.reject(new DOMException('Denied', 'NotAllowedError'));
+    }, mode);
+    await fallback.page.goto('/resume');
+    await fallback.launcher.click();
+    await fallback.fullscreen.click();
+    await fallback.page.waitForSelector('[data-terminal-panel][data-terminal-viewport]');
+    assert.equal(await fallback.fullscreen.getAttribute('aria-pressed'), 'true');
+    assert.equal(await fallback.fullscreen.locator('[data-expand-icon]').isVisible(), false);
+    assert.equal(await fallback.fullscreen.locator('[data-restore-icon]').isVisible(), true);
+    assert.equal(await fallback.fullscreen.getAttribute('aria-label'), 'Свернуть терминал');
+    assert.equal(await fallback.page.evaluate(() => document.fullscreenElement), null);
+    assert.equal(
+      await fallback.panel.evaluate((element: Element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.left === 0 && rect.top === 0 && rect.width === innerWidth && rect.height === innerHeight;
+      }),
+      true,
+    );
+    await fallback.page.keyboard.press('Escape');
+    assert.equal(await fallback.panel.getAttribute('data-terminal-viewport'), null);
+    assert.equal(await fallback.launcher.getAttribute('aria-expanded'), 'true');
+    await fallback.fullscreen.click();
+    await fallback.page.waitForSelector('[data-terminal-panel][data-terminal-viewport]');
+    await fallback.page.getByRole('button', { name: 'Свернуть терминал' }).click();
+    assert.equal(await fallback.panel.getAttribute('data-terminal-viewport'), null);
+    assert.equal(await fallback.panel.isVisible(), true);
+    await fallback.fullscreen.click();
+    await fallback.page.waitForSelector('[data-terminal-panel][data-terminal-viewport]');
+    await fallback.close.click();
+    assert.equal(await fallback.panel.isVisible(), false);
+    assert.equal(await fallback.launcher.evaluate(hasFocus), true);
+    await fallback.context.close();
+    console.log(`PASS viewport fallback and localized controls when native fullscreen is ${mode}`);
+  }
+
+  const pending = await openResume();
+  await pending.context.addInitScript(() => {
+    Element.prototype.requestFullscreen = () =>
+      new Promise((_resolve, reject) => {
+        document.addEventListener('reject-test-fullscreen', () => reject(new DOMException('Denied', 'NotAllowedError')), { once: true });
+      });
+  });
+  await pending.page.goto('/resume');
+  await pending.launcher.click();
+  await pending.fullscreen.click();
+  await pending.close.click();
+  await pending.page.evaluate(() => document.dispatchEvent(new Event('reject-test-fullscreen')));
+  await pending.panel.waitFor({ state: 'hidden' });
+  assert.equal(await pending.panel.getAttribute('data-terminal-viewport'), null);
+  assert.equal(await pending.launcher.evaluate(hasFocus), true);
+  await pending.launcher.click();
+  assert.equal(await pending.panel.isVisible(), true);
+  assert.equal(await pending.panel.getAttribute('data-terminal-viewport'), null);
+  await pending.context.close();
+  console.log('PASS closing during a pending fullscreen request prevents a late fallback');
+
   assert.deepEqual(errors, []);
   assert.equal(askRequests, 0);
 } finally {
