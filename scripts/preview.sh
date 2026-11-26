@@ -6,7 +6,8 @@ set -euo pipefail
 
 root=$(git rev-parse --show-toplevel)
 port=8613
-log=${PREVIEW_LOG:-/tmp/opencode/preview.log}
+mkdir -p "${PREVIEW_LOG_DIR:-/tmp/opencode}"
+log=${PREVIEW_LOG:-$(mktemp "${PREVIEW_LOG_DIR:-/tmp/opencode}/preview-XXXXXX.log")}
 
 db_log=$("$root/scripts/local-db.sh")
 printf '%s\n' "$db_log"
@@ -18,6 +19,7 @@ fi
 
 mkdir -p "$(dirname "$log")"
 : >"$log"
+
 if command -v fuser >/dev/null 2>&1; then
   fuser -k "${port}/tcp" >/dev/null 2>&1 || true
   sleep 1
