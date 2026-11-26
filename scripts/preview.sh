@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One canonical preview port (8613) for whatever checkout you are in: converges
 # the local database, stops the process holding the port, starts the dev server
-# against that same database and waits until this checkout answers.
+# against that same database and waits until this launch bound the port.
 set -euo pipefail
 
 root=$(git rev-parse --show-toplevel)
@@ -29,25 +29,15 @@ fi
 
 (cd "$root/apps/site" && DATABASE_URL="$url" PORT="$port" exec setsid --fork bun run dev) >>"$log" 2>&1 </dev/null
 
-owns_port() {
-  local pid cwd
-  command -v ss >/dev/null 2>&1 || return 0
-  while read -r pid; do
-    [ -n "$pid" ] || continue
-    cwd=$(readlink -f "/proc/${pid}/cwd" 2>/dev/null) || continue
-    case $cwd in "$root"/*) ;; *) return 1 ;; esac
-  done < <(ss -ltnpH "sport = :${port}" 2>/dev/null | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u)
-  return 0
-}
-
 for _ in $(seq 1 40); do
-  if curl -fsS -m 2 "http://127.0.0.1:${port}/api/version" >/dev/null 2>&1; then
-    if owns_port; then
-      echo "preview: http://localhost:${port}  (log: $log)"
-      exit 0
-    fi
-    echo "port ${port} is served by a process outside $root; stop it and retry" >&2
+  if grep -qE 'EADDRINUSE|Failed to start server' "$log" 2>/dev/null; then
+    echo "port ${port} was already taken; another process won the race. Log:" >&2
+    tail -20 "$log" >&2
     exit 1
+  fi
+  if grep -q 'Server running at' "$log" 2>/dev/null && curl -fsS -m 2 "http://127.0.0.1:${port}/api/version" >/dev/null 2>&1; then
+    echo "preview: http://localhost:${port}  (log: $log)"
+    exit 0
   fi
   sleep 1
 done

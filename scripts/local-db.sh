@@ -9,13 +9,20 @@ port=${POSTGRES_PORT:-5433}
 url="postgres://begench:begench@127.0.0.1:${port}/begenchgeldyev"
 
 write_env() {
-  local file=$1 rel=${1#"$root"/} tmp
+  local file=$1 rel=${1#"$root"/} tmp status=0
   tmp=$(mktemp)
-  [ -f "$file" ] && grep -v '^DATABASE_URL=' "$file" >"$tmp" || true
+  if [ -f "$file" ]; then
+    grep -v '^DATABASE_URL=' "$file" >"$tmp" || status=$?
+    if [ "$status" -gt 1 ]; then
+      rm -f "$tmp"
+      echo "cannot read $rel; leaving it untouched" >&2
+      return 1
+    fi
+  fi
   printf 'DATABASE_URL=%s\n' "$url" >>"$tmp"
   if [ -f "$file" ] && cmp -s "$tmp" "$file"; then
     rm -f "$tmp"
-    return
+    return 0
   fi
   mv "$tmp" "$file"
   echo "wrote DATABASE_URL to $rel"
