@@ -1,4 +1,6 @@
 .env
+.env.local
+.env.*.local
 site.env
 apps/site/public/assets/
 dist/
@@ -9,3 +11,5 @@ node_modules/
 .vscode/
 .worktrees/
 .slim/deepwork/
+.slim/prototype/
+*.prototype.*

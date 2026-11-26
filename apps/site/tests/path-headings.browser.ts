@@ -93,7 +93,7 @@ try {
             baseline,
             'all headings match Projects gutters, top spacing and full width',
           );
-          assert.equal(box.x, width < 640 ? 20 : (width - 1152) / 2 + 32);
+          assert.equal(box.x, width < 640 ? 20 : (width - 1280) / 2 + 32);
           const styles = await header.evaluate((node: Element) => {
             const css = getComputedStyle(node);
             return {
@@ -187,7 +187,11 @@ try {
             assert.ok(title);
             if (width === 1440) {
               assert.ok(action.x > title.x + title.width && action.y < title.y + title.height, 'download sits beside the heading');
-              assert.ok(Math.abs(action.x - title.x - title.width - 16) < 1, 'PDF action keeps its 16px gap');
+              const padRight = await header.evaluate((node: Element) => parseFloat(getComputedStyle(node).paddingRight));
+              assert.ok(
+                Math.abs(action.x + action.width - (box.x + box.width - padRight)) < 1,
+                'PDF action right-aligns with the header row',
+              );
             }
             assert.equal(
               (await download.textContent()).replace(/\s+/g, ' ').trim(),

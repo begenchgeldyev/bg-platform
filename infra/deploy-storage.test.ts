@@ -14,7 +14,7 @@ const preflight = remote.slice(0, gitVerification).replace('REPO=/opt/apps/begen
 let directory: string;
 
 beforeAll(async () => {
-  const temporary = Bun.spawnSync(['mktemp', '-d', '/tmp/opencode/deploy-storage.XXXXXX']);
+  const temporary = Bun.spawnSync(['mktemp', '-d', `${Bun.env.TMPDIR ?? '/tmp'}/deploy-storage.XXXXXX`]);
   expect(temporary.exitCode).toBe(0);
   directory = temporary.stdout.toString().trim();
   expect(Bun.spawnSync(['mkdir', '-p', `${directory}/bin`, `${directory}/repo/.git`]).exitCode).toBe(0);
@@ -36,7 +36,7 @@ esac
 });
 
 afterAll(() => {
-  if (directory?.startsWith('/tmp/opencode/deploy-storage.')) {
+  if (directory?.includes('/deploy-storage.')) {
     expect(Bun.spawnSync(['rm', '-rf', '--', directory]).exitCode).toBe(0);
   }
 });
@@ -46,20 +46,12 @@ function dfOutput(available: string, inodes = false) {
 }
 
 async function runPreflight(
-  options: {
-    blocks?: string;
-    inodes?: string;
-    blocksExit?: number;
-    inodesExit?: number;
-    integration?: boolean;
-  } = {},
+  options: { blocks?: string; inodes?: string; blocksExit?: number; inodesExit?: number; integration?: boolean } = {},
 ) {
   await Promise.all(['df', 'git', 'docker'].map((command) => Bun.write(`${directory}/${command}.log`, '')));
-  const block = remote.match(/^  check_deploy_storage\(\) \{[\s\S]*?^  \}/m)?.[0];
+  const block = remote.match(/^ {2}check_deploy_storage\(\) \{[\s\S]*?^ {2}\}/m)?.[0];
   expect(block, 'The inline storage check must exist in the actual production script').toBeDefined();
-  const source = options.integration
-    ? preflight
-    : `set -euo pipefail\n${block}\ncheck_deploy_storage "$TEST_REPO"`;
+  const source = options.integration ? preflight : `set -euo pipefail\n${block}\ncheck_deploy_storage "$TEST_REPO"`;
   if (!source) throw new Error('Missing deployment preflight');
   const result = Bun.spawnSync(['bash', '-c', source], {
     env: {

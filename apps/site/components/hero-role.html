@@ -33,16 +33,6 @@
   letter-spacing: inherit;
   text-align: center;
 }
-/* Keep keyboard focus on the title text, not a rectangle around the full row. */
-[data-role-switch]:focus-visible {
-  outline: none;
-}
-[data-role-switch]:focus-visible > [aria-hidden="true"],
-[data-role-switch]:focus-visible [data-role-word] {
-  text-decoration-line: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 0.12em;
-}
 [data-role-label] {
   position: absolute;
   width: 1px;
@@ -56,6 +46,16 @@
   overflow: clip;
   vertical-align: bottom;
   text-align: center;
+}
+/* Keep keyboard focus on the title text, not a rectangle around the full row. */
+[data-role-switch]:focus-visible {
+  outline: none;
+}
+[data-role-switch]:focus-visible > [aria-hidden="true"],
+[data-role-switch]:focus-visible [data-role-word] {
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.12em;
 }
 [data-role-word] + span {
   color: var(--accent);

@@ -9,9 +9,9 @@ const output = process.env.EVIDENCE_DIR || '/tmp/opencode/projects-gallery';
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ executablePath: '/usr/bin/chromium', headless: true });
 const expected = [
-  { id: 4, name: 'Pantheon', image: '/public/projects/pantheon-pixel.png' },
-  { id: 2, name: 'bg-platform', image: '/public/projects/bg-platform-pixel.png' },
-  { id: 1, name: 'Interpreter', image: '/public/projects/interpreter-pixel.png' },
+  { name: 'Pantheon', image: '/public/projects/pantheon-pixel.png' },
+  { name: 'bg-platform', image: '/public/projects/bg-platform-pixel.png' },
+  { name: 'Interpreter', image: '/public/projects/interpreter-pixel.png' },
 ];
 const report: { real: unknown[]; fixtures: unknown[]; assets: unknown[]; aiRequests: number } = {
   real: [],
@@ -358,8 +358,14 @@ try {
       assert.equal(dataResponse.status(), 200);
       const data = (await dataResponse.json()) as { projects: { id: number; name: string; image: string; description: string }[] };
       assert.deepEqual(
-        data.projects.map(({ id, name, image }) => ({ id, name, image })),
+        data.projects.map(({ name, image }) => ({ name, image })),
         expected,
+      );
+      const ids = data.projects.map(({ id }) => id);
+      assert.equal(new Set(ids).size, ids.length, 'project ids must be unique');
+      assert.ok(
+        ids.every((id) => Number.isInteger(id) && id > 0),
+        'project ids come from the database',
       );
       const response = await page.goto('/projects', { waitUntil: 'domcontentloaded', timeout: 60000 });
       assert.equal(response.status(), 200);
@@ -468,18 +474,23 @@ try {
       assert.equal(focus.visible, true);
       assert.equal(focus.outline, '2px');
       await page.screenshot({ path: `${output}/focus-${lang}-${width}.png` });
+      const firstHref = await page.locator('.project-card-link').first().getAttribute('href');
+      assert.match(firstHref ?? '', /^\/projects\/\d+$/, 'the card links to its project page');
       await page.keyboard.press('Enter');
-      await page.waitForURL('**/projects/4');
+      await page.waitForURL(`**${firstHref}`);
       assert.equal(await page.locator('a[href="https://github.com/begenchgeldyev/pantheon"]').count(), 1);
       assert.equal(await page.locator('#project-upload-trigger').count(), 0);
       assert.deepEqual(errors, []);
       report.real.push({ lang, width, metrics, initialRequests, totalArtworkRequests: requests.length, shifts, errors });
       if (lang === 'en' && width === 1440) {
+        const idsByName = new Map(data.projects.map((project) => [project.name, project.id]));
         for (const item of expected) {
-          const detail = await page.goto(`/projects/${item.id}`, { waitUntil: 'domcontentloaded' });
+          const id = idsByName.get(item.name);
+          assert.ok(id, `${item.name} must have a database id`);
+          const detail = await page.goto(`/projects/${id}`, { waitUntil: 'domcontentloaded' });
           assert.equal(detail.status(), 200);
           assert.equal((await page.locator('[data-project-field="name"]').innerText()).trim().toLowerCase(), item.name.toLowerCase());
-          if (item.id !== 1) {
+          if (item.name !== 'Interpreter') {
             assert.equal(
               await page
                 .locator(`[data-project-field="content"] a[href="https://github.com/begenchgeldyev/${item.name.toLowerCase()}"]`)
@@ -585,7 +596,11 @@ try {
   await page.goto('/projects');
   await page.waitForFunction(() => document.querySelector<HTMLPictureElement>('.project-cover picture')?.hidden);
   assert.equal(await page.locator('.project-cover-fallback').first().isVisible(), true);
-  assert.equal(await page.locator('.project-card-link').first().getAttribute('href'), '/projects/4');
+  assert.match(
+    (await page.locator('.project-card-link').first().getAttribute('href')) ?? '',
+    /^\/projects\/\d+$/,
+    'the card links to its project page',
+  );
   report.fixtures.push({ type: 'avif-webp-png-error-fallback', passed: true });
   await context.close();
   assert.equal(report.aiRequests, 0);
