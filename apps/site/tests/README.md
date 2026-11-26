@@ -33,6 +33,10 @@ Apple touch icon remain static even when the runtime is enabled.
 Run the site on a free port, then use the existing Playwright and Chromium installation.
 These scripts intentionally do not add a workspace dependency or install browsers.
 
+`bun run preview` serves the current checkout on port 8613, and `bun run test:browser`
+runs every `*.browser.ts` below against `SITE_URL` (default `http://localhost:8613`).
+The manual form, when you need one script at a time:
+
 ```sh
 PORT=8625 bun --hot apps/site/server.ts
 export SITE_URL=http://localhost:8625

@@ -12,9 +12,13 @@
   "scripts": {
     "dev": "cd apps/site && bun run dev",
     "start": "cd apps/site && bun run start",
+    "preview": "bash scripts/preview.sh",
+    "test": "bun test",
+    "test:browser": "bash scripts/browser-tests.sh",
     "lint": "biome check .",
     "lint:boundaries": "depcruise --config .dependency-cruiser.cjs apps packages",
     "format": "biome check --write .",
+    "db:local": "bash scripts/local-db.sh",
     "db:generate": "cd packages/core && bun run db:generate",
     "db:migrate": "cd packages/core && bun run db:migrate",
     "db:push": "cd packages/core && bun run db:push",

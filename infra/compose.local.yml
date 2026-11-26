@@ -1,0 +1,24 @@
+name: begenchgeldyev-local
+
+# Local development only: Postgres on a host port, nothing else.
+# The production stack (infra/compose.yml) publishes no database port.
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:17-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: begench
+      POSTGRES_PASSWORD: begench
+      POSTGRES_DB: begenchgeldyev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U begench -d begenchgeldyev"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - pgdata-local:/var/lib/postgresql/data
+
+volumes:
+  pgdata-local:
