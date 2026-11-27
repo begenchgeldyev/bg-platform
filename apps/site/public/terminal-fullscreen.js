@@ -1,65 +1,154 @@
 (() => {
   const terminal = document.getElementById('terminal-wrap');
   const button = terminal?.querySelector('[data-terminal-fullscreen]');
-  if (!button || !document.fullscreenEnabled || typeof terminal.requestFullscreen !== 'function') return;
+  if (!button) return;
+
+  const panel = terminal.hasAttribute('data-terminal-panel');
+  const canFullscreen = document.fullscreenEnabled && typeof terminal.requestFullscreen === 'function';
+  if (!panel && !canFullscreen) return;
+
+  const launcher = document.querySelector('[data-terminal-launcher]');
+  const close = terminal.querySelector('[data-terminal-close]');
   const input = document.getElementById('terminal-input');
   const status = terminal.querySelector('[data-fullscreen-status]');
-  const copy =
+  const expandIcon = button.querySelector('[data-expand-icon]');
+  const restoreIcon = button.querySelector('[data-restore-icon]');
+  const error =
     document.documentElement.lang === 'ru'
-      ? {
-          expand: 'Развернуть терминал',
-          restore: 'Свернуть терминал',
-          error: 'Не удалось изменить полноэкранный режим. Попробуйте ещё раз.',
-        }
-      : { expand: 'Expand terminal', restore: 'Restore terminal', error: 'Could not change fullscreen mode. Please try again.' };
-  let wasFullscreen = false;
-  let pending = false;
+      ? 'Не удалось изменить полноэкранный режим. Попробуйте ещё раз.'
+      : 'Could not change fullscreen mode. Please try again.';
+  let wasExpanded = false;
+  let expansion = null;
+  let closing = false;
 
-  function sync() {
-    const fullscreen = document.fullscreenElement === terminal;
-    button.setAttribute('aria-label', fullscreen ? copy.restore : copy.expand);
-    button.setAttribute('title', fullscreen ? copy.restore : copy.expand);
-    button.setAttribute('aria-pressed', String(fullscreen));
-    if (fullscreen && !wasFullscreen) input?.focus({ preventScroll: true });
-    if (!fullscreen && wasFullscreen) button.focus({ preventScroll: true });
-    wasFullscreen = fullscreen;
+  const isNative = () => document.fullscreenElement === terminal;
+  const isExpanded = () => isNative() || terminal.hasAttribute('data-terminal-viewport');
+  const focus = (element) => element?.focus({ preventScroll: true });
+
+  // Parsing allow-discrete doesn't guarantee this engine can transition display.
+  function supportsDockMotion() {
+    if (!CSS.supports('transition-behavior', 'allow-discrete') || typeof CSSTransition === 'undefined') return false;
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;visibility:hidden;display:block;transition:display 1s allow-discrete';
+    document.body.append(probe);
+    try {
+      getComputedStyle(probe).display;
+      probe.style.display = 'none';
+      return probe.getAnimations().some((animation) => animation instanceof CSSTransition && animation.transitionProperty === 'display');
+    } finally {
+      probe.remove();
+    }
   }
 
-  async function toggle() {
-    if (pending) return;
-    pending = true;
+  function sync() {
+    const expanded = isExpanded();
+    const label = expanded ? button.dataset.restoreLabel : button.dataset.expandLabel;
+    button.setAttribute('aria-label', label);
+    button.title = label;
+    button.setAttribute('aria-pressed', String(expanded));
+    expandIcon.toggleAttribute('hidden', expanded);
+    restoreIcon.toggleAttribute('hidden', !expanded);
+    if (!closing && expanded !== wasExpanded) focus(expanded ? input : button);
+    wasExpanded = expanded;
+  }
+
+  async function changeExpansion() {
     status.textContent = '';
     try {
-      if (document.fullscreenElement === terminal) await document.exitFullscreen();
-      else await terminal.requestFullscreen();
+      if (isNative()) await document.exitFullscreen();
+      else if (isExpanded()) terminal.removeAttribute('data-terminal-viewport');
+      else if (canFullscreen) await terminal.requestFullscreen();
+      else terminal.setAttribute('data-terminal-viewport', '');
     } catch {
-      status.textContent = copy.error;
-      button.focus({ preventScroll: true });
+      if (panel && !isNative() && !closing) terminal.setAttribute('data-terminal-viewport', '');
+      else if (!closing) {
+        status.textContent = error;
+        focus(button);
+      }
     } finally {
-      pending = false;
       sync();
     }
   }
 
-  // The terminal wrapper focuses its input on click; do not let chrome clicks bubble.
-  button.addEventListener('mousedown', (event) => {
-    event.stopPropagation();
-    if (event.button === 0) {
-      event.preventDefault();
-      void toggle();
+  async function toggleExpansion() {
+    if (closing || expansion) return;
+    expansion = changeExpansion();
+    await expansion;
+    expansion = null;
+  }
+
+  function setOpen(open) {
+    terminal.hidden = !open;
+    terminal.inert = !open;
+    launcher.setAttribute('aria-expanded', String(open));
+    document.body.toggleAttribute('data-terminal-panel-open', open);
+  }
+
+  async function closePanel() {
+    if (closing) return;
+    closing = true;
+    try {
+      if (expansion) await expansion;
+      if (isNative()) await document.exitFullscreen();
+      terminal.removeAttribute('data-terminal-viewport');
+      setOpen(false);
+      status.textContent = '';
+      focus(launcher);
+    } catch {
+      status.textContent = error;
+      focus(close);
+    } finally {
+      sync();
+      closing = false;
     }
-  });
-  button.addEventListener('click', (event) => {
-    event.stopPropagation();
-    if (event.detail === 0) void toggle();
-  });
-  terminal.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && document.fullscreenElement === terminal) {
+  }
+
+  // Mouse acts on press. Touch, pen, keyboard and assistive activation use click.
+  function bind(control, activate) {
+    let pressHandled = false;
+    let pointerType = '';
+    control.addEventListener('pointerdown', (event) => {
+      pointerType = event.pointerType;
+      pressHandled = false;
+    });
+    control.addEventListener('mousedown', (event) => {
+      event.stopPropagation();
+      if (event.button !== 0 || pointerType === 'touch' || pointerType === 'pen' || event.sourceCapabilities?.firesTouchEvents) return;
       event.preventDefault();
-      void toggle();
+      pressHandled = true;
+      activate(false);
+    });
+    control.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const nonMousePointer = (event.pointerType || pointerType) !== 'mouse' && event.detail !== 0;
+      if (event.detail === 0 || !pressHandled) activate(nonMousePointer);
+      pointerType = '';
+      pressHandled = false;
+    });
+  }
+
+  bind(button, toggleExpansion);
+  terminal.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !event.isComposing && isExpanded()) {
+      event.preventDefault();
+      void toggleExpansion();
     }
   });
   document.addEventListener('fullscreenchange', sync);
   sync();
-  terminal.querySelector('[data-terminal-toolbar]').style.removeProperty('display');
+
+  if (panel && launcher && close) {
+    terminal.toggleAttribute('data-terminal-motion', supportsDockMotion());
+    bind(launcher, (touch) => {
+      if (!terminal.hidden) void closePanel();
+      else {
+        setOpen(true);
+        focus(touch ? close : input);
+      }
+    });
+    bind(close, closePanel);
+    launcher.hidden = false;
+  } else {
+    terminal.querySelector('[data-terminal-toolbar]').style.removeProperty('display');
+  }
 })();

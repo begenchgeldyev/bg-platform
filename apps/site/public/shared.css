@@ -76,6 +76,9 @@ button:focus-visible {
   overflow-wrap: anywhere;
   overflow-anchor: none;
 }
+[data-terminal-fullscreen] svg[hidden] {
+  display: none;
+}
 .terminal-help > div {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

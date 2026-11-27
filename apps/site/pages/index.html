@@ -42,35 +42,7 @@
         id="terminal-wrap"
         class="bg-[#0e0e0e] border border-outline-variant/50 rounded-lg overflow-hidden shadow-2xl shadow-primary-container/5">
         <!--#include terminal-chrome.html-->
-        <!-- Terminal Body — single scrollable area, input lives inside -->
-        <div
-          id="terminal-body"
-          class="p-4 sm:p-6 font-mono text-base leading-relaxed h-[360px] sm:h-[400px] overflow-y-auto custom-scrollbar">
-          <!-- biome-ignore format: Keep punctuation adjacent to the inline command. -->
-          <div id="terminal-intro" class="text-on-surface-variant/90">
-            Ask about Begench, or type <span class="text-primary-container">help</span>.
-          </div>
-          <!-- active input line, always appended last by JS -->
-          <div id="input-line" class="flex items-center gap-3 mt-2 min-h-8 cursor-text">
-            <span id="terminal-prompt" aria-hidden="true" class="text-primary-container font-bold shrink-0">&gt;</span>
-            <span id="terminal-loader" class="terminal-pixels" aria-hidden="true" hidden>
-              <span></span>
-              <span></span>
-              <span></span>
-            </span>
-            <input
-              id="terminal-input"
-              aria-label="Terminal message or command"
-              aria-describedby="terminal-status"
-              class="min-w-0 flex-1 w-full bg-transparent border-0 p-0 text-white placeholder:text-on-surface-variant"
-              type="text"
-              autocomplete="off"
-              autocorrect="off"
-              autocapitalize="off"
-              spellcheck="false">
-            <span id="terminal-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></span>
-          </div>
-        </div>
+        <!--#include terminal-body.html-->
       </div>
     </section>
 

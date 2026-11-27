@@ -259,8 +259,9 @@ describe('ProjectController.getPageById', () => {
     });
     const resWithTags = await withTags.controller.getPageById(new Request('http://localhost/projects/1'), 1);
     const htmlWithTags = await resWithTags.text();
-    expect(htmlWithTags).toContain('TypeScript');
-    expect(htmlWithTags).toContain('Bun');
+    const mainWithTags = htmlWithTags.match(/<main\b[\s\S]*?<\/main>/)?.[0] ?? '';
+    expect(mainWithTags).toContain('>TypeScript</span>');
+    expect(mainWithTags).toContain('>Bun</span>');
 
     const noTags = controller({
       projects: [project({ id: 2, tags: [] })],
@@ -268,8 +269,10 @@ describe('ProjectController.getPageById', () => {
     });
     const resNoTags = await noTags.controller.getPageById(new Request('http://localhost/projects/2'), 2);
     const htmlNoTags = await resNoTags.text();
-    expect(htmlNoTags).not.toContain('TypeScript');
-    expect(htmlNoTags).not.toContain('<span class="text-[9px]');
+    const mainWithoutTags = htmlNoTags.match(/<main\b[\s\S]*?<\/main>/)?.[0] ?? '';
+    expect(mainWithoutTags).not.toBe('');
+    expect(mainWithoutTags).not.toContain('>TypeScript</span>');
+    expect(mainWithoutTags).not.toContain('<span class="text-[9px]');
   });
 });
 

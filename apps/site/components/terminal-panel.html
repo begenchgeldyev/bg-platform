@@ -1,0 +1,28 @@
+<link rel="stylesheet" href="/public/terminal-panel.css">
+<section
+  id="terminal-wrap"
+  data-terminal-panel
+  aria-label="{{ terminalTitle }}"
+  class="border-t border-outline-variant/30 bg-surface-container-lowest"
+  hidden
+  inert>
+  <div data-terminal-toolbar class="flex items-center justify-between border-b border-outline-variant/30 bg-surface-container-high px-2">
+    <span class="pl-2 font-mono text-xs font-semibold uppercase tracking-wider text-on-surface">{{ terminalTitle }}</span>
+    <div class="flex">
+      {{ terminalFullscreenButton }}
+      <button
+        type="button"
+        data-terminal-close
+        aria-label="{{ terminalCloseLabel }}"
+        title="{{ terminalCloseLabel }}"
+        class="inline-flex h-11 w-11 cursor-pointer items-center justify-center text-on-surface-variant hover:text-primary-container">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="m6 6 12 12M18 6 6 18" />
+        </svg>
+      </button>
+    </div>
+  </div>
+  {{ terminalBody }}
+</section>
+{{ terminalEmulator }}
+<script src="/public/terminal-fullscreen.js" defer></script>

@@ -11,7 +11,7 @@ type LayoutConfig = {
   activeNav?: NavKey;
   brandIsLink?: boolean;
   selectionTextClass?: string;
-  showTerminalIcon?: boolean;
+  headerTerminal?: 'decorative' | 'panel';
   pageTransitions?: boolean;
   htmx?: boolean;
 };
@@ -30,11 +30,11 @@ const DYNAMIC_PAGE_CONFIGS: Record<DynamicPage['page'], Omit<LayoutConfig, 'titl
   project: {
     activeNav: 'projects',
     brandIsLink: true,
-    showTerminalIcon: true,
+    headerTerminal: 'panel',
   },
   admin: {
     brandIsLink: true,
-    showTerminalIcon: true,
+    headerTerminal: 'decorative',
     pageTransitions: false,
   },
 };
@@ -144,7 +144,7 @@ const PAGE_CONFIGS: Record<string, PageConfig> = {
     fragmentFile: 'resume.html',
     activeNav: 'resume',
     brandIsLink: true,
-    showTerminalIcon: true,
+    headerTerminal: 'panel',
   },
   '/logs': {
     htmx: true,
@@ -152,7 +152,7 @@ const PAGE_CONFIGS: Record<string, PageConfig> = {
     fragmentFile: 'logs.html',
     activeNav: 'logs',
     brandIsLink: true,
-    showTerminalIcon: true,
+    headerTerminal: 'panel',
   },
   '/projects': {
     htmx: true,
@@ -160,7 +160,7 @@ const PAGE_CONFIGS: Record<string, PageConfig> = {
     fragmentFile: 'projects.html',
     activeNav: 'projects',
     brandIsLink: true,
-    showTerminalIcon: true,
+    headerTerminal: 'panel',
   },
 };
 
@@ -219,9 +219,15 @@ async function renderHeader(config: LayoutConfig, lang: Lang) {
       begench@127.0.0.1 <span class="hidden sm:inline opacity-60">WHOAMI</span>
     </div>`;
 
-  const terminal = config.showTerminalIcon
-    ? `<span class="material-symbols-outlined hidden sm:inline-block cursor-default" aria-hidden="true">terminal</span>`
-    : '';
+  let terminal = '';
+  if (config.headerTerminal === 'decorative') {
+    terminal = '<span class="material-symbols-outlined hidden sm:inline-block cursor-default" aria-hidden="true">terminal</span>';
+  } else if (config.headerTerminal === 'panel') {
+    const label = t(lang, 'terminalToggleLabel');
+    terminal = `<button type="button" data-terminal-launcher aria-controls="terminal-wrap" aria-expanded="false" aria-label="${label}" title="${label}" class="h-11 w-11 cursor-pointer text-on-surface-variant hover:text-primary-container" hidden>
+      <span class="material-symbols-outlined" aria-hidden="true">terminal</span>
+    </button>`;
+  }
 
   const langButtons = (['en', 'ru'] as const)
     .map((code) => {
@@ -268,6 +274,27 @@ async function renderFooter(lang: Lang) {
   });
 }
 
+function terminalBodyCopy(lang: Lang) {
+  return { terminalIntro: t(lang, 'terminalIntro'), terminalPromptLabel: t(lang, 'terminalPromptLabel') };
+}
+
+function renderTerminalFullscreenButton(lang: Lang) {
+  return renderComponentTemplate('terminal-fullscreen-button.html', {
+    terminalExpandLabel: t(lang, 'terminalExpandLabel'),
+    terminalRestoreLabel: t(lang, 'terminalRestoreLabel'),
+  });
+}
+
+async function renderTerminalPanel(lang: Lang): Promise<string> {
+  return renderComponentTemplate('terminal-panel.html', {
+    terminalTitle: t(lang, 'terminalTitle'),
+    terminalCloseLabel: t(lang, 'terminalCloseLabel'),
+    terminalBody: await renderComponentTemplate('terminal-body.html', terminalBodyCopy(lang)),
+    terminalEmulator: await renderComponentTemplate('terminal-emulator.html'),
+    terminalFullscreenButton: await renderTerminalFullscreenButton(lang),
+  });
+}
+
 async function renderLayout(config: LayoutConfig, content: string, lang: Lang) {
   const selectionTextClass = config.selectionTextClass ?? 'selection:text-on-primary-container';
   return renderComponentTemplate('document.html', {
@@ -278,6 +305,7 @@ async function renderLayout(config: LayoutConfig, content: string, lang: Lang) {
     pageTransitions: config.pageTransitions === false ? '' : await renderComponentTemplate('page-transitions.html'),
     selectionTextClass,
     sharedHead: await renderSharedHead(config),
+    terminalPanel: config.headerTerminal === 'panel' ? await renderTerminalPanel(lang) : '',
     title: config.title[lang]
       .toLowerCase()
       .replaceAll('&', '&amp;')
@@ -346,6 +374,8 @@ export async function renderPage(pathname: string, lang: Lang, req?: Request): P
   }
 
   const content = await resolveIncludes(await renderAssetUrls(await fragment.text()), {
+    ...terminalBodyCopy(lang),
+    terminalFullscreenButton: pathname === '/' ? await renderTerminalFullscreenButton(lang) : '',
     resumeBadge: `[${t(lang, 'navResume')}]`,
     downloadResume: t(lang, 'footerResumeLink'),
   });

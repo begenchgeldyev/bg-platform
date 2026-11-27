@@ -49,6 +49,7 @@ bun apps/site/tests/hero.browser.ts
 bun apps/site/tests/hero-centering.browser.ts
 bun apps/site/tests/hero-directions.browser.ts
 bun apps/site/tests/fullscreen.browser.ts
+bun apps/site/tests/terminal-panel.browser.ts
 ```
 
 - `motion`: real native navigation/animation samples, EN/RU desktop/mobile, history,
@@ -67,6 +68,8 @@ bun apps/site/tests/fullscreen.browser.ts
   frame captures. This avoids requiring Playwright's optional video encoder.
 - `fullscreen`: real Fullscreen API entry/restore, Escape/Enter/Space, desktop/touch
   emulation, focus/scroll, Tab completion, unsupported and rejected-request boundaries.
+- `terminal-panel`: public header launcher, dock focus and transcript retention, touch
+  layout, native fullscreen and viewport fallback, and close during expansion. It blocks AI requests.
 
 Screenshots/JSON stay in `EVIDENCE_DIR`, never in the repository. Transition frame
 screenshots pause the actual CSS animations at 0/70/160ms; a separate unpaused run
