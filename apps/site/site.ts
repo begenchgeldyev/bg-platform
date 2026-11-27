@@ -1,5 +1,7 @@
 import { stat } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
+import { getClientBundle } from './client-bundle';
+import { assetResponse, CONTENT_CACHE_CONTROL, ContentAssets, isNotModified, rewriteAssetUrls } from './content-assets';
 import { type Lang, localizedFragmentFile, resolveLang, t } from './i18n';
 
 type NavKey = 'projects' | 'logs' | 'resume';
@@ -11,6 +13,7 @@ type LayoutConfig = {
   selectionTextClass?: string;
   showTerminalIcon?: boolean;
   pageTransitions?: boolean;
+  htmx?: boolean;
 };
 
 type PageConfig = LayoutConfig & { fragmentFile: string };
@@ -40,6 +43,7 @@ const APP_DIR = import.meta.dir;
 const PAGES_DIR = join(APP_DIR, 'pages');
 const COMPONENTS_DIR = join(APP_DIR, 'components');
 const PUBLIC_DIR = join(APP_DIR, 'public');
+const contentAssets = new ContentAssets(PUBLIC_DIR);
 const templateCache = new Map<string, Promise<string>>();
 const assetMetaCache = new Map<string, Promise<AssetMeta>>();
 const pageCache = new Map<string, PageEntry>();
@@ -79,48 +83,6 @@ type PageEntry = {
   html: string;
   etag: string;
 };
-
-type ByteRange = { start: number; end: number };
-
-function isNotModified(req: Request | undefined, etag: string) {
-  const ifNoneMatch = req?.headers.get('if-none-match');
-  if (!ifNoneMatch) {
-    return false;
-  }
-
-  return ifNoneMatch.split(',').some((candidate) => {
-    const tag = candidate.trim();
-    return tag === '*' || tag === etag || tag === `W/${etag}`;
-  });
-}
-
-function parseSingleRange(header: string, size: number): ByteRange | 'unsatisfiable' | null {
-  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
-  if (!match) {
-    return null;
-  }
-
-  const [, rawStart, rawEnd] = match;
-  if (rawStart === '' && rawEnd === '') {
-    return null;
-  }
-
-  if (rawStart === '') {
-    const suffixLength = Number(rawEnd);
-    if (!Number.isInteger(suffixLength) || suffixLength <= 0) {
-      return null;
-    }
-    return { start: Math.max(0, size - suffixLength), end: size - 1 };
-  }
-
-  const start = Number(rawStart);
-  const end = rawEnd === '' ? size - 1 : Number(rawEnd);
-  if (!Number.isInteger(start) || !Number.isInteger(end) || start > end || start >= size) {
-    return 'unsatisfiable';
-  }
-
-  return { start, end: Math.min(end, size - 1) };
-}
 
 // size + mtime is enough to tell two revisions of the same file apart without hashing it.
 function assetMeta(assetPath: string, fileSize: number): Promise<AssetMeta> {
@@ -185,6 +147,7 @@ const PAGE_CONFIGS: Record<string, PageConfig> = {
     showTerminalIcon: true,
   },
   '/logs': {
+    htmx: true,
     title: { en: 'LOGS — BEGENCH_GELDYEV@ROOT:~$', ru: 'ЛОГИ — BEGENCH_GELDYEV@ROOT:~$' },
     fragmentFile: 'logs.html',
     activeNav: 'logs',
@@ -192,6 +155,7 @@ const PAGE_CONFIGS: Record<string, PageConfig> = {
     showTerminalIcon: true,
   },
   '/projects': {
+    htmx: true,
     title: { en: 'PROJECTS — BEGENCH_GELDYEV@ROOT:~$', ru: 'ПРОЕКТЫ — BEGENCH_GELDYEV@ROOT:~$' },
     fragmentFile: 'projects.html',
     activeNav: 'projects',
@@ -218,11 +182,22 @@ async function loadTemplate(templatePath: string) {
 
 export async function renderComponentTemplate(componentPath: string, values: Record<string, string> = {}) {
   const template = await loadTemplate(join(COMPONENTS_DIR, componentPath));
-  return fillTemplate(template, values);
+  return fillTemplate(await renderAssetUrls(template), values);
 }
 
-async function renderSharedHead() {
-  return renderComponentTemplate('shared-head.html');
+async function renderAssetUrls(template: string) {
+  if (!isProduction()) return template;
+  return rewriteAssetUrls(template, async (path) => {
+    if (path === '/assets/ask-chat.js') return (await getClientBundle())?.url ?? path;
+    return contentAssets.url(path);
+  });
+}
+
+async function renderSharedHead(config: LayoutConfig) {
+  const htmxUrl = config.htmx && isProduction() ? await contentAssets.url('/public/vendor/htmx.min.js') : '/public/vendor/htmx.min.js';
+  return renderComponentTemplate('shared-head.html', {
+    htmx: config.htmx ? `<script src="${htmxUrl}" defer></script>` : '',
+  });
 }
 
 function renderNavLink(activeNav: NavKey | undefined, href: string, label: string, key: NavKey) {
@@ -302,7 +277,7 @@ async function renderLayout(config: LayoutConfig, content: string, lang: Lang) {
     lang,
     pageTransitions: config.pageTransitions === false ? '' : await renderComponentTemplate('page-transitions.html'),
     selectionTextClass,
-    sharedHead: await renderSharedHead(),
+    sharedHead: await renderSharedHead(config),
     title: config.title[lang]
       .toLowerCase()
       .replaceAll('&', '&amp;')
@@ -337,7 +312,8 @@ async function resolveIncludes(html: string, values: Record<string, string>): Pr
     const componentPath = join(COMPONENTS_DIR, match[1].trim());
     const file = Bun.file(componentPath);
     const content = (await file.exists()) ? await file.text() : `<!-- missing: ${match[1].trim()} -->`;
-    html = html.replace(match[0], () => fillTemplate(content, values));
+    const rendered = fillTemplate(await renderAssetUrls(content), values);
+    html = html.replace(match[0], () => rendered);
   }
   return html;
 }
@@ -369,7 +345,7 @@ export async function renderPage(pathname: string, lang: Lang, req?: Request): P
     return new Response('Not Found', { status: 404 });
   }
 
-  const content = await resolveIncludes(await fragment.text(), {
+  const content = await resolveIncludes(await renderAssetUrls(await fragment.text()), {
     resumeBadge: `[${t(lang, 'navResume')}]`,
     downloadResume: t(lang, 'footerResumeLink'),
   });
@@ -409,6 +385,20 @@ export async function servePublicAsset(pathname: string, req?: Request): Promise
     return new Response('Forbidden', { status: 403 });
   }
 
+  if (/\.[a-f0-9]{64}\.(css|js)$/.test(relativePath)) {
+    const asset = await contentAssets.get(`/public/${relativePath}`);
+    if (!asset) return new Response('Not Found', { status: 404 });
+    return assetResponse(
+      asset.body,
+      new Headers({
+        'Cache-Control': CONTENT_CACHE_CONTROL,
+        'Content-Type': asset.body.type,
+        ETag: asset.etag,
+      }),
+      req,
+    );
+  }
+
   const file = Bun.file(assetPath);
   if (!(await file.exists())) {
     return new Response('Not Found', { status: 404 });
@@ -417,7 +407,6 @@ export async function servePublicAsset(pathname: string, req?: Request): Promise
   const extension = extname(assetPath);
   const meta = await assetMeta(assetPath, file.size);
   const headers = new Headers({
-    'Accept-Ranges': 'bytes',
     'Cache-Control': LONG_LIVED_EXTENSIONS.has(extension) ? IMMUTABLE_CACHE_CONTROL : REVALIDATE_CACHE_CONTROL,
     'Content-Type': MIME[extension] ?? 'application/octet-stream',
     ETag: meta.etag,
@@ -426,30 +415,5 @@ export async function servePublicAsset(pathname: string, req?: Request): Promise
     headers.set('Last-Modified', meta.lastModified);
   }
 
-  if (isNotModified(req, meta.etag)) {
-    return new Response(null, { status: 304, headers });
-  }
-
-  const rangeHeader = req?.headers.get('range');
-  if (rangeHeader && meta.size > 0) {
-    const range = parseSingleRange(rangeHeader, meta.size);
-    if (range === 'unsatisfiable') {
-      headers.set('Content-Range', `bytes */${meta.size}`);
-      return new Response(null, { status: 416, headers });
-    }
-
-    if (range) {
-      headers.set('Content-Length', String(range.end - range.start + 1));
-      headers.set('Content-Range', `bytes ${range.start}-${range.end}/${meta.size}`);
-      const body = req?.method === 'HEAD' ? null : file.slice(range.start, range.end + 1);
-      return new Response(body, { status: 206, headers });
-    }
-  }
-
-  if (req?.method === 'HEAD') {
-    headers.set('Content-Length', String(meta.size));
-    return new Response(null, { headers });
-  }
-
-  return new Response(file, { headers });
+  return assetResponse(file, headers, req);
 }

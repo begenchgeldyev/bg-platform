@@ -109,6 +109,8 @@ try {
         if (width < 500) await button.tap();
         const count = width < 500 ? 4 : 3;
         assert.equal(await page.evaluate(() => (window as unknown as { copyWrites: string[] }).copyWrites.length), count);
+        assert.equal(await page.locator('script[src*="htmx"]').count(), 0);
+        await page.addScriptTag({ url: '/public/vendor/htmx.min.js' });
         // Real HTMX replacement, including reexecution of the external copy script.
         await page.evaluate(async () => {
           await (window as unknown as { htmx: { ajax: (method: string, url: string, options: object) => Promise<void> } }).htmx.ajax(
