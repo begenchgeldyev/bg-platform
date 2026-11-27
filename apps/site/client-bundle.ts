@@ -1,8 +1,15 @@
 import { join } from 'node:path';
+import { assetResponse, CONTENT_CACHE_CONTROL, contentHash, hashedUrl, isNotModified } from './content-assets';
 
-export type ClientBundle = { code: string; etag: string };
+export type ClientBundle = { code: string; etag: string; url: string };
 
 const ENTRY = join(import.meta.dir, 'client', 'main.ts');
+let currentBundle: Promise<ClientBundle | null> | undefined;
+
+export function getClientBundle() {
+  currentBundle ??= buildClientBundle();
+  return currentBundle;
+}
 
 export async function buildClientBundle(entry = ENTRY): Promise<ClientBundle | null> {
   try {
@@ -13,7 +20,8 @@ export async function buildClientBundle(entry = ENTRY): Promise<ClientBundle | n
       return null;
     }
     const code = await output.text();
-    return { code, etag: `"${Bun.hash(code).toString(36)}"` };
+    const hash = contentHash(code);
+    return { code, etag: `"${hash}"`, url: hashedUrl('/assets/ask-chat.js', hash) };
   } catch (error) {
     console.error('ask-chat: building the client bundle failed', error);
     return null;
@@ -21,12 +29,24 @@ export async function buildClientBundle(entry = ENTRY): Promise<ClientBundle | n
 }
 
 export function serveClientBundle(req: Request, bundle: ClientBundle | null): Response {
+  const path = new URL(req.url).pathname;
+  const stable = path === '/assets/ask-chat.js';
+  if (!stable && path !== bundle?.url) return new Response('Not Found', { status: 404 });
   if (!bundle) {
     return new Response('assistant is unavailable', { status: 503 });
   }
-  const headers = { 'Cache-Control': 'no-cache', ETag: bundle.etag };
-  if (req.headers.get('if-none-match') === bundle.etag) {
-    return new Response(null, { status: 304, headers });
+  const headers = new Headers({
+    'Cache-Control': stable ? 'no-cache' : CONTENT_CACHE_CONTROL,
+    'Content-Type': 'text/javascript; charset=utf-8',
+    ETag: bundle.etag,
+  });
+  if (stable) {
+    if (isNotModified(req, bundle.etag)) return new Response(null, { status: 304, headers });
+    if (req.method === 'HEAD') {
+      headers.set('Content-Length', String(Buffer.byteLength(bundle.code)));
+      return new Response(null, { headers });
+    }
+    return new Response(bundle.code, { headers });
   }
-  return new Response(bundle.code, { headers: { ...headers, 'Content-Type': 'text/javascript; charset=utf-8' } });
+  return assetResponse(new Blob([bundle.code]), headers, req);
 }
