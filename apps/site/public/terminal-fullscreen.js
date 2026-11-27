@@ -64,6 +64,7 @@
 
   function setOpen(open) {
     terminal.hidden = !open;
+    terminal.inert = !open;
     launcher.setAttribute('aria-expanded', String(open));
     document.body.toggleAttribute('data-terminal-panel-open', open);
   }

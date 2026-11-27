@@ -32,6 +32,82 @@ function hasFocus(element: Element) {
 }
 
 try {
+  const motion = await openResume({ reducedMotion: 'no-preference' });
+  await motion.page.goto('/resume');
+  const opening = await motion.panel.evaluate(async (element: HTMLElement) => {
+    document.querySelector<HTMLButtonElement>('[data-terminal-launcher]')?.click();
+    const transitions = element.getAnimations().filter((animation): animation is CSSTransition => animation instanceof CSSTransition);
+    const slide = transitions.find((animation) => animation.transitionProperty === 'transform');
+    const fade = transitions.find((animation) => animation.transitionProperty === 'opacity');
+    if (!slide?.effect || !fade?.effect) return null;
+    slide.pause();
+    fade.pause();
+    await Promise.all([slide.ready, fade.ready]);
+    slide.currentTime = 90;
+    fade.currentTime = 75;
+    const rect = element.getBoundingClientRect();
+    const sample = {
+      duration: slide.effect.getTiming().duration,
+      fadeDuration: fade.effect.getTiming().duration,
+      opacity: Number(getComputedStyle(element).opacity),
+      slidingUp: rect.top < innerHeight && rect.bottom > innerHeight,
+      focused: document.activeElement?.id === 'terminal-input',
+    };
+    for (const transition of transitions) transition.finish();
+    return sample;
+  });
+  assert.ok(opening, 'opening has a real slide and fade');
+  assert.equal(opening.duration, 180);
+  assert.equal(opening.fadeDuration, 150);
+  assert.ok(opening.opacity > 0.65 && opening.opacity < 1);
+  assert.equal(opening.slidingUp, true);
+  assert.equal(opening.focused, true);
+  await motion.input.fill('help');
+  await motion.input.press('Enter');
+  await motion.input.fill('cat phi');
+  const closing = await motion.panel.evaluate(async (element: HTMLElement) => {
+    const launcher = document.querySelector<HTMLButtonElement>('[data-terminal-launcher]');
+    element.querySelector<HTMLButtonElement>('[data-terminal-close]')?.click();
+    const slide = element
+      .getAnimations()
+      .find((animation) => animation instanceof CSSTransition && animation.transitionProperty === 'transform');
+    if (!slide) return null;
+    slide.pause();
+    await slide.ready;
+    slide.currentTime = 90;
+    const rect = element.getBoundingClientRect();
+    const sample = {
+      slidingDown: rect.top < innerHeight && rect.bottom > innerHeight,
+      inert: element.inert,
+      focusReturned: document.activeElement === launcher,
+      expanded: launcher?.getAttribute('aria-expanded'),
+      reserveRemoved: !document.body.hasAttribute('data-terminal-panel-open'),
+    };
+    launcher?.click();
+    return sample;
+  });
+  assert.deepEqual(closing, { slidingDown: true, inert: true, focusReturned: true, expanded: 'false', reserveRemoved: true });
+  assert.equal(await motion.launcher.getAttribute('aria-expanded'), 'true');
+  assert.equal(await motion.input.inputValue(), 'cat phi');
+  assert.equal(await motion.panel.locator('[data-user-message]').count(), 1);
+  await motion.close.click();
+  await motion.panel.waitFor({ state: 'hidden' });
+  await motion.context.close();
+  console.log('PASS Terminal dock animates both ways and preserves state when reopening mid-close');
+
+  const reduced = await openResume({ reducedMotion: 'reduce' });
+  await reduced.page.goto('/resume');
+  await reduced.launcher.click();
+  assert.equal(await reduced.panel.isVisible(), true);
+  assert.equal(await reduced.input.evaluate(hasFocus), true);
+  assert.equal(await reduced.panel.evaluate((element: Element) => element.getAnimations().length), 0);
+  await reduced.close.click();
+  assert.equal(await reduced.panel.isVisible(), false);
+  assert.equal(await reduced.launcher.evaluate(hasFocus), true);
+  assert.equal(await reduced.panel.evaluate((element: Element) => element.getAnimations().length), 0);
+  await reduced.context.close();
+  console.log('PASS Terminal dock opens and closes immediately under reduced motion');
+
   const { context, page, launcher, panel, close, input } = await openResume();
   const response = await page.goto('/resume');
   assert.equal(response?.status(), 200);
@@ -51,8 +127,8 @@ try {
   assert.equal(await close.evaluate(hasFocus), true);
   await page.keyboard.press('Enter');
   assert.equal(await launcher.getAttribute('aria-expanded'), 'false');
-  assert.equal(await panel.isVisible(), false);
   assert.equal(await launcher.evaluate(hasFocus), true);
+  await panel.waitFor({ state: 'hidden' });
 
   await page.keyboard.press('Space');
   assert.equal(await panel.isVisible(), true);
@@ -64,7 +140,7 @@ try {
   await input.press('ArrowUp');
   assert.equal(await input.inputValue(), 'help');
   await launcher.press('Enter');
-  assert.equal(await panel.isVisible(), false);
+  await panel.waitFor({ state: 'hidden' });
   await launcher.click();
   await page.reload();
   assert.equal(await panel.isVisible(), false);
@@ -79,6 +155,9 @@ try {
   assert.equal(await touch.launcher.getAttribute('aria-expanded'), 'true');
   assert.equal(await touch.panel.getAttribute('aria-label'), 'Терминал');
   assert.equal(await touch.close.evaluate(hasFocus), true);
+  await touch.page.waitForFunction(
+    () => Math.abs((document.querySelector('[data-terminal-panel]')?.getBoundingClientRect().bottom ?? 0) - innerHeight) <= 1,
+  );
   const bounds = await touch.panel.evaluate((element: Element) => {
     scrollTo(0, document.documentElement.scrollHeight);
     const rect = element.getBoundingClientRect();
@@ -95,7 +174,7 @@ try {
   assert.ok(bounds.top > 0 && bounds.footerBottom <= bounds.top + 1);
   assert.ok(bounds.scrollWidth <= bounds.width);
   await touch.close.tap();
-  assert.equal(await touch.panel.isVisible(), false);
+  await touch.panel.waitFor({ state: 'hidden' });
   await touch.context.close();
   console.log('PASS localized touch launcher and accessible page end above the dock');
 
@@ -113,6 +192,7 @@ try {
   assert.equal(await native.fullscreen.count(), 1, 'the dock offers the existing fullscreen control');
   await native.fullscreen.click();
   await native.page.waitForFunction(() => document.fullscreenElement?.id === 'terminal-wrap');
+  assert.equal(await native.panel.evaluate((element: Element) => element.getAnimations().length), 0);
   assert.equal(await native.fullscreen.getAttribute('aria-pressed'), 'true');
   assert.equal(await native.fullscreen.locator('[data-expand-icon]').isVisible(), false);
   assert.equal(await native.fullscreen.locator('[data-restore-icon]').isVisible(), true);
@@ -146,6 +226,7 @@ try {
     await fallback.launcher.click();
     await fallback.fullscreen.click();
     await fallback.page.waitForSelector('[data-terminal-panel][data-terminal-viewport]');
+    assert.equal(await fallback.panel.evaluate((element: Element) => element.getAnimations().length), 0);
     assert.equal(await fallback.fullscreen.getAttribute('aria-pressed'), 'true');
     assert.equal(await fallback.fullscreen.locator('[data-expand-icon]').isVisible(), false);
     assert.equal(await fallback.fullscreen.locator('[data-restore-icon]').isVisible(), true);
@@ -169,7 +250,7 @@ try {
     await fallback.fullscreen.click();
     await fallback.page.waitForSelector('[data-terminal-panel][data-terminal-viewport]');
     await fallback.close.click();
-    assert.equal(await fallback.panel.isVisible(), false);
+    await fallback.panel.waitFor({ state: 'hidden' });
     assert.equal(await fallback.launcher.evaluate(hasFocus), true);
     await fallback.context.close();
     console.log(`PASS viewport fallback and localized controls when native fullscreen is ${mode}`);
