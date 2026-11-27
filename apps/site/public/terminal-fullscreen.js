@@ -25,6 +25,21 @@
   const isExpanded = () => isNative() || terminal.hasAttribute('data-terminal-viewport');
   const focus = (element) => element?.focus({ preventScroll: true });
 
+  // Parsing allow-discrete doesn't guarantee this engine can transition display.
+  function supportsDockMotion() {
+    if (!CSS.supports('transition-behavior', 'allow-discrete') || typeof CSSTransition === 'undefined') return false;
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;visibility:hidden;display:block;transition:display 1s allow-discrete';
+    document.body.append(probe);
+    try {
+      getComputedStyle(probe).display;
+      probe.style.display = 'none';
+      return probe.getAnimations().some((animation) => animation instanceof CSSTransition && animation.transitionProperty === 'display');
+    } finally {
+      probe.remove();
+    }
+  }
+
   function sync() {
     const expanded = isExpanded();
     const label = expanded ? button.dataset.restoreLabel : button.dataset.expandLabel;
@@ -123,6 +138,7 @@
   sync();
 
   if (panel && launcher && close) {
+    terminal.toggleAttribute('data-terminal-motion', supportsDockMotion());
     bind(launcher, (touch) => {
       if (!terminal.hidden) void closePanel();
       else {

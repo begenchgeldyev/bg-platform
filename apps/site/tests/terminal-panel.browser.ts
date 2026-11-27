@@ -108,6 +108,26 @@ try {
   await reduced.context.close();
   console.log('PASS Terminal dock opens and closes immediately under reduced motion');
 
+  const partialSupport = await openResume({ reducedMotion: 'no-preference' });
+  await partialSupport.context.addInitScript(() => {
+    // Model an engine that parses allow-discrete but cannot transition display.
+    const getAnimations = Element.prototype.getAnimations;
+    Element.prototype.getAnimations = function (options) {
+      return getAnimations.call(this, options).filter((animation) => {
+        return !(animation instanceof CSSTransition && animation.transitionProperty === 'display');
+      });
+    };
+  });
+  await partialSupport.page.goto('/resume');
+  await partialSupport.launcher.click();
+  assert.equal(await partialSupport.panel.isVisible(), true);
+  assert.equal(await partialSupport.panel.evaluate((element: Element) => element.getAnimations().length), 0);
+  await partialSupport.close.click();
+  assert.equal(await partialSupport.panel.isVisible(), false);
+  assert.equal(await partialSupport.launcher.evaluate(hasFocus), true);
+  await partialSupport.context.close();
+  console.log('PASS Terminal dock skips motion when the browser cannot transition display');
+
   const { context, page, launcher, panel, close, input } = await openResume();
   const response = await page.goto('/resume');
   assert.equal(response?.status(), 200);

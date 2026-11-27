@@ -25,20 +25,20 @@ body[data-terminal-panel-open] {
 
 @media (prefers-reduced-motion: no-preference) {
   @supports (transition-behavior: allow-discrete) {
-    [data-terminal-panel]:not(:fullscreen, [data-terminal-viewport]) {
+    [data-terminal-panel][data-terminal-motion]:not(:fullscreen, [data-terminal-viewport]) {
       transition:
         transform 180ms ease,
         opacity 150ms ease,
         display 180ms allow-discrete;
     }
 
-    [data-terminal-panel]:not(:fullscreen, [data-terminal-viewport])[hidden] {
+    [data-terminal-panel][data-terminal-motion]:not(:fullscreen, [data-terminal-viewport])[hidden] {
       transform: translateY(100%);
       opacity: 0.75;
     }
 
     @starting-style {
-      [data-terminal-panel]:not(:fullscreen, [data-terminal-viewport], [hidden]) {
+      [data-terminal-panel][data-terminal-motion]:not(:fullscreen, [data-terminal-viewport], [hidden]) {
         transform: translateY(100%);
         opacity: 0.75;
       }
